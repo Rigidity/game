@@ -16,25 +16,60 @@ struct VertexOutput {
 
 @vertex
 fn vertex(vertex: Vertex) -> VertexOutput {
-   let x = f32((vertex.packed >> 28) & 0xF);
-   let y = f32((vertex.packed >> 24) & 0xF);
-   let z = f32((vertex.packed >> 20) & 0xF);
-   let corner = (vertex.packed >> 18) & 0x3;
-   let tex_index = vertex.packed & 0x3FFFF;
+    let x = f32((vertex.packed >> 28) & 0xF);
+    let y = f32((vertex.packed >> 24) & 0xF);
+    let z = f32((vertex.packed >> 20) & 0xF);
+    let corner = (vertex.packed >> 18) & 0x3;
+    let face = (vertex.packed >> 15) & 0x7;
+    let tex_index = vertex.packed & 0x7FFF;
 
-   let uv = vec2<f32>(
-       f32(corner & 1),
-       f32(corner >> 1)
-   );
+    var final_pos = vec3<f32>(x, y, z);
+    
+    // Apply offsets based on face and corner
+    switch face {
+        case 0u: { // Top
+            final_pos.x += f32(corner & 1u);
+            final_pos.z += f32(corner >> 1u);
+            final_pos.y += 1.0;
+        }
+        case 1u: { // Bottom
+            final_pos.x += f32(corner & 1u);
+            final_pos.z += f32(corner >> 1u);
+        }
+        case 2u: { // Left
+            final_pos.z += f32(corner & 1u);
+            final_pos.y += f32(corner >> 1u);
+        }
+        case 3u: { // Right
+            final_pos.z += f32(corner & 1u);
+            final_pos.y += f32(corner >> 1u);
+            final_pos.x += 1.0;
+        }
+        case 4u: { // Front
+            final_pos.x += f32(corner & 1u);
+            final_pos.y += f32(corner >> 1u);
+            final_pos.z += 1.0;
+        }
+        case 5u: { // Back
+            final_pos.x += f32(corner & 1u);
+            final_pos.y += f32(corner >> 1u);
+        }
+        default: {}
+    }
 
-   var out: VertexOutput;
-   out.clip_position = mesh_position_local_to_clip(
-        get_world_from_local(vertex.instance_index),
-        vec4<f32>(x, y, z, 1.0),
+    let uv = vec2<f32>(
+        f32(corner & 1u),
+        f32(corner >> 1u)
     );
-   out.uv = uv;
-   out.tex_index = tex_index;
-   return out;
+
+    var out: VertexOutput;
+    out.clip_position = mesh_position_local_to_clip(
+        get_world_from_local(vertex.instance_index),
+        vec4<f32>(final_pos, 1.0),
+    );
+    out.uv = uv;
+    out.tex_index = tex_index;
+    return out;
 }
 
 @fragment
