@@ -1,0 +1,13 @@
+[package]
+name = "defaria"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["dev"]
+dev = ["bevy/dynamic_linking"]
+
+[dependencies]
+bevy = "0.15.1"
+bevy_asset_loader = "0.22.0"
+bevy_flycam = "0.15.0"
