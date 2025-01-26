@@ -62,6 +62,10 @@ impl VoxelMesh {
     }
 
     pub fn add_face(&mut self, pos: UVec3, face: VoxelFace, texture_index: u32) {
+        if face != VoxelFace::Top {
+            return;
+        }
+
         match face {
             VoxelFace::Left => {
                 let a = self.add_vertex(

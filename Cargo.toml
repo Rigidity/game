@@ -11,3 +11,6 @@ dev = ["bevy/dynamic_linking"]
 bevy = "0.15.1"
 bevy_asset_loader = "0.22.0"
 bevy_flycam = "0.15.0"
+
+[profile.dev]
+opt-level = 1

@@ -51,23 +51,24 @@ fn setup(
     let material = materials.add(VoxelMaterial { array_texture });
 
     let mut mesh = VoxelMesh::new();
-    mesh.add_face(UVec3::ZERO, VoxelFace::Left, 0);
-    mesh.add_face(UVec3::ZERO, VoxelFace::Right, 0);
-    mesh.add_face(UVec3::ZERO, VoxelFace::Front, 0);
-    mesh.add_face(UVec3::ZERO, VoxelFace::Back, 0);
-    mesh.add_face(UVec3::ZERO, VoxelFace::Top, 0);
-    mesh.add_face(UVec3::ZERO, VoxelFace::Bottom, 0);
 
-    mesh.add_face(UVec3::ONE, VoxelFace::Left, 0);
-    mesh.add_face(UVec3::ONE, VoxelFace::Right, 0);
-    mesh.add_face(UVec3::ONE, VoxelFace::Front, 0);
-    mesh.add_face(UVec3::ONE, VoxelFace::Back, 0);
-    mesh.add_face(UVec3::ONE, VoxelFace::Top, 0);
-    mesh.add_face(UVec3::ONE, VoxelFace::Bottom, 0);
+    for x in 0..16 {
+        for y in 0..16 {
+            for z in 0..16 {
+                let position = UVec3::new(x, y, z);
+                mesh.add_face(position, VoxelFace::Left, 0);
+                mesh.add_face(position, VoxelFace::Right, 0);
+                mesh.add_face(position, VoxelFace::Front, 0);
+                mesh.add_face(position, VoxelFace::Back, 0);
+                mesh.add_face(position, VoxelFace::Top, 0);
+                mesh.add_face(position, VoxelFace::Bottom, 0);
+            }
+        }
+    }
 
     commands.spawn((
         Mesh3d(meshes.add(mesh.build())),
         MeshMaterial3d(material),
-        Transform::from_xyz(0.0, 0.5, 0.0),
+        Transform::from_xyz(0.0, 0.0, 0.0),
     ));
 }
