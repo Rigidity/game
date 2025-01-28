@@ -525,29 +525,15 @@ fn handle_block_interaction(
     let ray_origin = player_transform.translation + camera_transform.translation;
     let ray_direction = camera_transform.forward().normalize();
 
-    // Add debug print
-    if mouse.just_pressed(MouseButton::Left) || mouse.just_pressed(MouseButton::Right) {
-        info!(
-            "Casting ray from {:?} in direction {:?}",
-            ray_origin, ray_direction
-        );
-    }
-
     // Check for block intersections
     if let Some((hit_pos, hit_normal)) =
         raycast_blocks(&chunk_manager, ray_origin, ray_direction, MAX_REACH)
     {
-        // Add debug print
-        info!("Hit block at {:?} with normal {:?}", hit_pos, hit_normal);
-
         let place_pos = if mouse.just_pressed(MouseButton::Right) {
             hit_pos + hit_normal
         } else {
             hit_pos
         };
-
-        // Add debug print
-        info!("Placing/breaking at {:?}", place_pos);
 
         // Convert world position to chunk and local coordinates
         let chunk_pos = IVec3::new(
@@ -610,9 +596,6 @@ fn handle_block_interaction(
                 }
             }
         }
-    } else {
-        // Add debug print
-        info!("No block hit");
     }
 }
 
@@ -632,7 +615,10 @@ fn raycast_blocks(
             let block_center = block_pos + Vec3::splat(0.5);
             let block_aabb = Aabb::new(block_center, Vec3::ONE);
 
-            if let Some(_) = block_aabb.ray_intersection(ray_origin, ray_direction) {
+            if block_aabb
+                .ray_intersection(ray_origin, ray_direction)
+                .is_some()
+            {
                 // Calculate which face was hit by checking the entry point
                 let hit_point = current_pos - ray_direction * step;
                 let relative_pos = hit_point - block_center;
