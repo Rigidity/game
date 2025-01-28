@@ -130,40 +130,59 @@ fn player_move(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
-    mut query: Query<(&Player, &Transform, &mut LinearVelocity)>,
+    mut query: Query<&mut LinearVelocity, With<Player>>,
+    camera: Query<&Transform, With<PlayerCamera>>,
 ) {
     if let Ok(window) = primary_window.get_single() {
-        for (_camera, transform, mut linear_velocity) in query.iter_mut() {
-            let mut velocity = Vec3::ZERO;
-            let local_z = transform.local_z();
-            let forward = -Vec3::new(local_z.x, 0., local_z.z);
-            let right = Vec3::new(local_z.z, 0., -local_z.x);
+        let mut linear_velocity = query.single_mut();
+        let transform = camera.single();
+        let mut velocity = Vec3::ZERO;
 
-            for key in keys.get_pressed() {
-                match window.cursor_options.grab_mode {
-                    CursorGrabMode::None => (),
-                    _ => {
-                        let key = *key;
-                        if key == KeyCode::KeyW {
-                            velocity += forward;
-                        } else if key == KeyCode::KeyS {
-                            velocity -= forward;
-                        } else if key == KeyCode::KeyA {
-                            velocity -= right;
-                        } else if key == KeyCode::KeyD {
-                            velocity += right;
-                        } else if key == KeyCode::Space {
-                            velocity += Vec3::Y;
-                        } else if key == KeyCode::ShiftLeft {
-                            velocity -= Vec3::Y;
-                        }
-                    }
-                }
+        // Get the camera's forward and right vectors
+        let forward = transform.forward();
+        // Project forward vector onto XZ plane and normalize
+        let forward = Vec3::new(forward.x, 0.0, forward.z).normalize_or_zero();
+        // Get right vector by rotating forward 90 degrees around Y axis
+        let right = Vec3::new(-forward.z, 0.0, forward.x);
+
+        // Handle movement input
+        if window.cursor_options.grab_mode != CursorGrabMode::None {
+            if keys.pressed(KeyCode::KeyW) {
+                velocity += forward;
+            }
+            if keys.pressed(KeyCode::KeyS) {
+                velocity -= forward;
+            }
+            if keys.pressed(KeyCode::KeyA) {
+                velocity -= right;
+            }
+            if keys.pressed(KeyCode::KeyD) {
+                velocity += right;
             }
 
+            // Normalize horizontal movement
             velocity = velocity.normalize_or_zero();
 
-            linear_velocity.0 += velocity * time.delta_secs() * 12.0;
+            // Apply movement speed
+            const MOVEMENT_SPEED: f32 = 5.0;
+            velocity *= MOVEMENT_SPEED;
+
+            // Preserve vertical velocity (for gravity/jumping)
+            velocity.y = linear_velocity.0.y;
+
+            // Handle vertical movement (temporary flying controls)
+            if keys.pressed(KeyCode::Space) {
+                velocity.y = MOVEMENT_SPEED;
+            }
+            if keys.pressed(KeyCode::ShiftLeft) {
+                velocity.y = -MOVEMENT_SPEED;
+            }
+
+            // Smoothly interpolate to target velocity
+            const ACCELERATION: f32 = 20.0;
+            linear_velocity.0 = linear_velocity
+                .0
+                .lerp(velocity, ACCELERATION * time.delta_secs());
         }
     } else {
         warn!("Primary window not found for `player_move`!");
