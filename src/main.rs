@@ -53,6 +53,23 @@ impl Aabb {
             && self.min.z <= other.max.z
             && self.max.z >= other.min.z
     }
+
+    fn ray_intersection(&self, ray_origin: Vec3, ray_direction: Vec3) -> Option<f32> {
+        let t1 = (self.min - ray_origin) / ray_direction;
+        let t2 = (self.max - ray_origin) / ray_direction;
+
+        let t_min = t1.min(t2);
+        let t_max = t1.max(t2);
+
+        let t_near = t_min.x.max(t_min.y).max(t_min.z);
+        let t_far = t_max.x.min(t_max.y).min(t_max.z);
+
+        if t_near > t_far || t_far < 0.0 {
+            None
+        } else {
+            Some(t_near.max(0.0))
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Hash, Default, States)]
@@ -66,6 +83,11 @@ enum GameState {
 pub struct ImageAssets {
     #[asset(path = "Voxels/Rock.png")]
     pub rock: Handle<Image>,
+}
+
+#[derive(Resource)]
+struct VoxelMaterials {
+    material: Handle<VoxelMaterial>,
 }
 
 fn main() {
@@ -95,11 +117,15 @@ fn main() {
         .add_systems(
             Update,
             (
-                player_look,
-                toggle_grab,
-                player_move,
-                voxel_physics.after(player_move),
+                (
+                    player_look,
+                    toggle_grab,
+                    player_move,
+                    voxel_physics.after(player_move),
+                ),
+                handle_block_interaction,
             )
+                .chain()
                 .run_if(in_state(GameState::Next)),
         )
         .run();
@@ -293,24 +319,34 @@ fn build_chunk_meshes(
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<VoxelMaterial>>,
-    chunk_manager: Res<ChunkManager>,
+    mut chunk_manager: ResMut<ChunkManager>,
 ) {
     let array_texture = create_texture_array(vec![image_assets.rock.clone()], &mut images).unwrap();
-
     let material = materials.add(VoxelMaterial { array_texture });
 
-    for (&chunk_pos, chunk) in chunk_manager.chunks.iter() {
-        let mesh = chunk.render(&chunk_manager.chunks, chunk_pos).build();
+    commands.insert_resource(VoxelMaterials {
+        material: material.clone(),
+    });
 
-        commands.spawn((
-            Mesh3d(meshes.add(mesh)),
-            MeshMaterial3d(material.clone()),
-            Transform::from_xyz(
-                chunk_pos.x as f32 * 16.0,
-                chunk_pos.y as f32 * 16.0,
-                chunk_pos.z as f32 * 16.0,
-            ),
-        ));
+    // Clone the chunks map to avoid borrow conflict
+    let chunks = chunk_manager.chunks.clone();
+
+    for (&chunk_pos, chunk) in chunk_manager.chunks.iter_mut() {
+        let mesh = chunk.render(&chunks, chunk_pos).build();
+
+        let entity = commands
+            .spawn((
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(material.clone()),
+                Transform::from_xyz(
+                    chunk_pos.x as f32 * 16.0,
+                    chunk_pos.y as f32 * 16.0,
+                    chunk_pos.z as f32 * 16.0,
+                ),
+            ))
+            .id();
+
+        chunk.mesh_entity = Some(entity);
     }
 }
 
@@ -458,5 +494,194 @@ fn is_position_solid(chunk_manager: &ChunkManager, pos: Vec3) -> bool {
         chunk.get(local_pos).is_solid()
     } else {
         false // Changed to false to allow falling in void
+    }
+}
+
+const MAX_REACH: f32 = 5.0;
+
+fn handle_block_interaction(
+    mouse: Res<ButtonInput<MouseButton>>,
+    primary_window: Query<&Window, With<PrimaryWindow>>,
+    camera_query: Query<(&Transform, &Parent), With<PlayerCamera>>,
+    player_query: Query<&Transform, With<Player>>,
+    mut chunk_manager: ResMut<ChunkManager>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    materials: Res<VoxelMaterials>,
+) {
+    // Only handle input when mouse is clicked
+    if !mouse.just_pressed(MouseButton::Left) && !mouse.just_pressed(MouseButton::Right) {
+        return;
+    }
+
+    let window = primary_window.single();
+    if window.cursor_options.grab_mode == CursorGrabMode::None {
+        return;
+    }
+
+    let (camera_transform, camera_parent) = camera_query.single();
+    let player_transform = player_query.get(camera_parent.get()).unwrap();
+
+    let ray_origin = player_transform.translation + camera_transform.translation;
+    let ray_direction = camera_transform.forward().normalize();
+
+    // Add debug print
+    if mouse.just_pressed(MouseButton::Left) || mouse.just_pressed(MouseButton::Right) {
+        info!(
+            "Casting ray from {:?} in direction {:?}",
+            ray_origin, ray_direction
+        );
+    }
+
+    // Check for block intersections
+    if let Some((hit_pos, hit_normal)) =
+        raycast_blocks(&chunk_manager, ray_origin, ray_direction, MAX_REACH)
+    {
+        // Add debug print
+        info!("Hit block at {:?} with normal {:?}", hit_pos, hit_normal);
+
+        let place_pos = if mouse.just_pressed(MouseButton::Right) {
+            hit_pos + hit_normal
+        } else {
+            hit_pos
+        };
+
+        // Add debug print
+        info!("Placing/breaking at {:?}", place_pos);
+
+        // Convert world position to chunk and local coordinates
+        let chunk_pos = IVec3::new(
+            (place_pos.x / 16.0).floor() as i32,
+            (place_pos.y / 16.0).floor() as i32,
+            (place_pos.z / 16.0).floor() as i32,
+        );
+
+        let local_pos = UVec3::new(
+            place_pos.x.rem_euclid(16.0) as u32,
+            place_pos.y.rem_euclid(16.0) as u32,
+            place_pos.z.rem_euclid(16.0) as u32,
+        );
+
+        // Modify the block
+        if let Some(chunk) = chunk_manager.chunks.get_mut(&chunk_pos) {
+            if mouse.just_pressed(MouseButton::Left) {
+                chunk.set(local_pos, Block::Air);
+            } else {
+                chunk.set(local_pos, Block::Rock);
+            }
+
+            // Regenerate mesh for the modified chunk
+            regenerate_chunk_mesh(
+                &mut commands,
+                &mut chunk_manager.chunks,
+                chunk_pos,
+                &mut meshes,
+                &materials,
+            );
+
+            // Regenerate neighboring chunks if the modified block was on the edge
+            let neighbors = [
+                IVec3::X,
+                IVec3::NEG_X,
+                IVec3::Y,
+                IVec3::NEG_Y,
+                IVec3::Z,
+                IVec3::NEG_Z,
+            ];
+
+            for &offset in &neighbors {
+                if local_pos.x == 0
+                    || local_pos.x == 15
+                    || local_pos.y == 0
+                    || local_pos.y == 15
+                    || local_pos.z == 0
+                    || local_pos.z == 15
+                {
+                    let neighbor_pos = chunk_pos + offset;
+                    if chunk_manager.chunks.contains_key(&neighbor_pos) {
+                        regenerate_chunk_mesh(
+                            &mut commands,
+                            &mut chunk_manager.chunks,
+                            neighbor_pos,
+                            &mut meshes,
+                            &materials,
+                        );
+                    }
+                }
+            }
+        }
+    } else {
+        // Add debug print
+        info!("No block hit");
+    }
+}
+
+fn raycast_blocks(
+    chunk_manager: &ChunkManager,
+    ray_origin: Vec3,
+    ray_direction: Vec3,
+    max_distance: f32,
+) -> Option<(Vec3, Vec3)> {
+    let mut current_pos = ray_origin;
+    let step = 0.1; // Small step size for reasonable accuracy
+
+    for _ in 0..((max_distance / step) as i32) {
+        let block_pos = current_pos.floor();
+
+        if is_position_solid(chunk_manager, block_pos) {
+            // Calculate hit normal by checking which face was hit
+            let block_center = block_pos + Vec3::splat(0.5);
+            let block_aabb = Aabb::new(block_center, Vec3::ONE);
+
+            if let Some(_) = block_aabb.ray_intersection(ray_origin, ray_direction) {
+                // Determine which face was hit by comparing distances
+                let distances = (current_pos - block_center).abs();
+                let normal = if distances.x >= distances.y && distances.x >= distances.z {
+                    Vec3::X * ray_direction.x.signum() * -1.0
+                } else if distances.y >= distances.x && distances.y >= distances.z {
+                    Vec3::Y * ray_direction.y.signum() * -1.0
+                } else {
+                    Vec3::Z * ray_direction.z.signum() * -1.0
+                };
+
+                return Some((block_pos, normal));
+            }
+        }
+
+        current_pos += ray_direction * step;
+    }
+
+    None
+}
+
+fn regenerate_chunk_mesh(
+    commands: &mut Commands,
+    chunks: &mut HashMap<IVec3, Chunk>,
+    chunk_pos: IVec3,
+    meshes: &mut Assets<Mesh>,
+    materials: &VoxelMaterials,
+) {
+    let chunk_cache = chunks.clone();
+
+    if let Some(chunk) = chunks.get_mut(&chunk_pos) {
+        let mesh = chunk.render(&chunk_cache, chunk_pos).build();
+
+        if let Some(entity) = chunk.mesh_entity {
+            commands.entity(entity).despawn();
+        }
+
+        chunk.mesh_entity = Some(
+            commands
+                .spawn((
+                    Mesh3d(meshes.add(mesh)),
+                    MeshMaterial3d(materials.material.clone()),
+                    Transform::from_xyz(
+                        chunk_pos.x as f32 * 16.0,
+                        chunk_pos.y as f32 * 16.0,
+                        chunk_pos.z as f32 * 16.0,
+                    ),
+                ))
+                .id(),
+        );
     }
 }

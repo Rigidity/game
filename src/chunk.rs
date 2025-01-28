@@ -10,12 +10,14 @@ const CHUNK_SIZE: u32 = 16;
 #[derive(Debug, Clone)]
 pub struct Chunk {
     blocks: Vec<Block>,
+    pub mesh_entity: Option<Entity>,
 }
 
 impl Default for Chunk {
     fn default() -> Self {
         Self {
             blocks: vec![Block::Air; (CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE) as usize],
+            mesh_entity: None,
         }
     }
 }
