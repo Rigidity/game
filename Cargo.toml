@@ -9,6 +9,7 @@ dev = ["bevy/dynamic_linking"]
 
 [dependencies]
 bevy = "0.15.1"
+bevy_asset_loader = "0.22.0"
 noise = "0.9.0"
 
 [profile.dev]

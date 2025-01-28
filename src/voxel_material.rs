@@ -12,7 +12,11 @@ use bevy::{
 use crate::voxel_mesh::VoxelMesh;
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
-pub struct VoxelMaterial {}
+pub struct VoxelMaterial {
+    #[texture(0, dimension = "2d_array")]
+    #[sampler(1)]
+    pub array_texture: Handle<Image>,
+}
 
 impl Material for VoxelMaterial {
     fn vertex_shader() -> ShaderRef {

@@ -1,5 +1,8 @@
 #import bevy_pbr::mesh_functions::{get_world_from_local, mesh_position_local_to_clip}
 
+@group(2) @binding(0) var array_texture: texture_2d_array<f32>;
+@group(2) @binding(1) var array_texture_sampler: sampler;
+
 struct Vertex {
     @builtin(instance_index) instance_index: u32,
     @location(0) packed: u32,
@@ -9,7 +12,7 @@ struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) world_position: vec4<f32>,
     @location(1) uv: vec2<f32>,
-    @location(2) color: u32,
+    @location(2) tex_index: u32,
     @location(3) ao: f32,
 }
 
@@ -21,7 +24,7 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     let corner = (vertex.packed >> 18) & 0x3;
     let face = (vertex.packed >> 15) & 0x7;
     let ao = f32((vertex.packed >> 13) & 0x3) / 3.0;  // Unpack AO from bits 13-14
-    let color = vertex.packed & 0x1FFF;  // Get remaining 13 bits for color
+    let tex_index = vertex.packed & 0x1FFF;  // Get remaining 13 bits for tex_index
 
     var final_pos = vec3<f32>(x, y, z);
     
@@ -69,7 +72,7 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     );
     out.world_position = vec4<f32>(final_pos, 1.0);
     out.uv = uv;
-    out.color = color;
+    out.tex_index = tex_index;
     out.ao = ao;
     return out;
 }
@@ -77,7 +80,6 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // Apply AO darkening with more subtle transitions
-    let ao_factor = mix(0.6, 1.0, in.ao);
-    let color = vec3<f32>(0.6, 1.0, 1.0);
-    return vec4<f32>(color * ao_factor, 1.0);
+    let ao_factor = mix(0.3, 1.0, in.ao);
+    return vec4<f32>(textureSample(array_texture, array_texture_sampler, in.uv, i32(in.tex_index)).xyz * ao_factor, 1.0);
 }

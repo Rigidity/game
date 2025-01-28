@@ -1,5 +1,6 @@
 mod block;
 mod chunk;
+mod texture_array;
 mod voxel_material;
 mod voxel_mesh;
 
@@ -9,9 +10,11 @@ use bevy::{
     utils::HashMap,
     window::{CursorGrabMode, PrimaryWindow},
 };
+use bevy_asset_loader::prelude::*;
 use block::Block;
 use chunk::Chunk;
 use noise::{NoiseFn, Perlin};
+use texture_array::create_texture_array;
 use voxel_material::VoxelMaterial;
 
 #[derive(Resource)]
@@ -52,6 +55,19 @@ impl Aabb {
     }
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, Hash, Default, States)]
+enum GameState {
+    #[default]
+    Loading,
+    Next,
+}
+
+#[derive(AssetCollection, Resource)]
+pub struct ImageAssets {
+    #[asset(path = "Voxels/Rock.png")]
+    pub rock: Handle<Image>,
+}
+
 fn main() {
     App::new()
         .add_plugins((
@@ -61,8 +77,14 @@ fn main() {
         .insert_resource(ChunkManager {
             chunks: HashMap::new(),
         })
+        .init_state::<GameState>()
+        .add_loading_state(
+            LoadingState::new(GameState::Loading)
+                .continue_to_state(GameState::Next)
+                .load_collection::<ImageAssets>(),
+        )
         .add_systems(
-            Startup,
+            OnEnter(GameState::Next),
             (
                 setup_player,
                 initial_grab_cursor,
@@ -77,7 +99,8 @@ fn main() {
                 toggle_grab,
                 player_move,
                 voxel_physics.after(player_move),
-            ),
+            )
+                .run_if(in_state(GameState::Next)),
         )
         .run();
 }
@@ -199,8 +222,8 @@ fn player_move(
             // Normalize horizontal movement
             movement = movement.normalize_or_zero();
 
-            const MOVEMENT_SPEED: f32 = 6.0;
-            const JUMP_FORCE: f32 = 8.0;
+            const MOVEMENT_SPEED: f32 = 8.0;
+            const JUMP_FORCE: f32 = 9.0;
 
             // Apply movement
             let target_velocity = movement * MOVEMENT_SPEED;
@@ -227,10 +250,10 @@ fn player_move(
 fn generate_chunks(mut chunk_manager: ResMut<ChunkManager>) {
     let perlin = Perlin::new(42);
 
-    // Generate a 4x4x4 grid of chunks
-    for chunk_x in 0..4 {
-        for chunk_y in 0..4 {
-            for chunk_z in 0..4 {
+    // Generate a grid of chunks
+    for chunk_x in 0..16 {
+        for chunk_y in 0..16 {
+            for chunk_z in 0..16 {
                 let mut chunk = Chunk::new();
                 let chunk_pos = IVec3::new(chunk_x, chunk_y, chunk_z);
 
@@ -243,9 +266,9 @@ fn generate_chunks(mut chunk_manager: ResMut<ChunkManager>) {
                             let world_z = chunk_z * 16 + z as i32;
 
                             let noise_value = perlin.get([
-                                world_x as f64 * 0.1,
-                                world_y as f64 * 0.1,
-                                world_z as f64 * 0.1,
+                                world_x as f64 * 0.04,
+                                world_y as f64 * 0.04,
+                                world_z as f64 * 0.04,
                             ]);
 
                             let normalized_noise = (noise_value + 1.0) / 2.0;
@@ -266,11 +289,15 @@ fn generate_chunks(mut chunk_manager: ResMut<ChunkManager>) {
 
 fn build_chunk_meshes(
     mut commands: Commands,
+    image_assets: Res<ImageAssets>,
+    mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<VoxelMaterial>>,
     chunk_manager: Res<ChunkManager>,
 ) {
-    let material = materials.add(VoxelMaterial {});
+    let array_texture = create_texture_array(vec![image_assets.rock.clone()], &mut images).unwrap();
+
+    let material = materials.add(VoxelMaterial { array_texture });
 
     for (&chunk_pos, chunk) in chunk_manager.chunks.iter() {
         let mesh = chunk.render(&chunk_manager.chunks, chunk_pos).build();
@@ -294,7 +321,7 @@ fn voxel_physics(
 ) {
     let (mut transform, mut velocity, mut physics) = query.single_mut();
 
-    const GRAVITY: f32 = -20.0;
+    const GRAVITY: f32 = -25.0;
     const TERMINAL_VELOCITY: f32 = -30.0;
     const PLAYER_SIZE: Vec3 = Vec3::new(0.8, 1.8, 0.8);
 
