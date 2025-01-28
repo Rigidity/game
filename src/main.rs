@@ -629,19 +629,25 @@ fn raycast_blocks(
         let block_pos = current_pos.floor();
 
         if is_position_solid(chunk_manager, block_pos) {
-            // Calculate hit normal by checking which face was hit
             let block_center = block_pos + Vec3::splat(0.5);
             let block_aabb = Aabb::new(block_center, Vec3::ONE);
 
             if let Some(_) = block_aabb.ray_intersection(ray_origin, ray_direction) {
-                // Determine which face was hit by comparing distances
-                let distances = (current_pos - block_center).abs();
-                let normal = if distances.x >= distances.y && distances.x >= distances.z {
-                    Vec3::X * ray_direction.x.signum() * -1.0
-                } else if distances.y >= distances.x && distances.y >= distances.z {
-                    Vec3::Y * ray_direction.y.signum() * -1.0
+                // Calculate which face was hit by checking the entry point
+                let hit_point = current_pos - ray_direction * step;
+                let relative_pos = hit_point - block_center;
+
+                // Find the axis with the largest magnitude - that's our hit normal
+                let normal = if relative_pos.x.abs() > relative_pos.y.abs()
+                    && relative_pos.x.abs() > relative_pos.z.abs()
+                {
+                    Vec3::X * relative_pos.x.signum()
+                } else if relative_pos.y.abs() > relative_pos.x.abs()
+                    && relative_pos.y.abs() > relative_pos.z.abs()
+                {
+                    Vec3::Y * relative_pos.y.signum()
                 } else {
-                    Vec3::Z * ray_direction.z.signum() * -1.0
+                    Vec3::Z * relative_pos.z.signum()
                 };
 
                 return Some((block_pos, normal));
