@@ -77,6 +77,7 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // Apply AO darkening with more subtle transitions
-    let ao_factor = mix(0.7, 1.0, in.ao);
-    return vec4<f32>(ao_factor, ao_factor, ao_factor, 1.0);
+    let ao_factor = mix(0.6, 1.0, in.ao);
+    let color = vec3<f32>(0.6, 1.0, 1.0);
+    return vec4<f32>(color * ao_factor, 1.0);
 }

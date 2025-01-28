@@ -27,6 +27,31 @@ struct VoxelPhysics {
     on_ground: bool,
 }
 
+#[derive(Debug)]
+struct Aabb {
+    min: Vec3,
+    max: Vec3,
+}
+
+impl Aabb {
+    fn new(center: Vec3, size: Vec3) -> Self {
+        let half_size = size * 0.5;
+        Self {
+            min: center - half_size,
+            max: center + half_size,
+        }
+    }
+
+    fn intersects(&self, other: &Aabb) -> bool {
+        self.min.x <= other.max.x
+            && self.max.x >= other.min.x
+            && self.min.y <= other.max.y
+            && self.max.y >= other.min.y
+            && self.min.z <= other.max.z
+            && self.max.z >= other.min.z
+    }
+}
+
 fn main() {
     App::new()
         .add_plugins((
@@ -75,7 +100,7 @@ fn setup_player(mut commands: Commands) {
         .with_child((
             PlayerCamera,
             Camera3d::default(),
-            Transform::from_xyz(0.0, 1.6, 0.0),
+            Transform::from_xyz(0.0, 0.6, 0.0),
             Visibility::Inherited,
         ));
 }
@@ -174,7 +199,7 @@ fn player_move(
             // Normalize horizontal movement
             movement = movement.normalize_or_zero();
 
-            const MOVEMENT_SPEED: f32 = 5.0;
+            const MOVEMENT_SPEED: f32 = 6.0;
             const JUMP_FORCE: f32 = 8.0;
 
             // Apply movement
@@ -271,106 +296,92 @@ fn voxel_physics(
 
     const GRAVITY: f32 = -20.0;
     const TERMINAL_VELOCITY: f32 = -30.0;
+    const PLAYER_SIZE: Vec3 = Vec3::new(0.8, 1.8, 0.8);
 
-    // Calculate new position first
+    // Calculate new position
     let mut new_pos = transform.translation + velocity.0 * time.delta_secs();
 
-    // Player dimensions (slightly larger than visual size for better collision)
-    let player_width = 0.8; // Increased from 0.6 for better collision
-    let player_height = 1.8;
-    let player_radius = player_width / 2.0;
+    // Create player Aabb
+    let player_aabb = Aabb::new(new_pos, PLAYER_SIZE);
 
-    // Reset ground check
-    physics.on_ground = false;
+    // Get all potentially colliding blocks
+    let min_block = (player_aabb.min - Vec3::ONE * 0.5).floor().as_ivec3();
+    let max_block = (player_aabb.max + Vec3::ONE * 0.5).ceil().as_ivec3();
 
-    // Floor collision check with multiple points
-    for offset_x in [-player_radius, 0.0, player_radius] {
-        for offset_z in [-player_radius, 0.0, player_radius] {
-            // Check slightly below feet for better ground detection
-            let feet_pos = new_pos - Vec3::Y * (player_height / 2.0 + 0.01)
-                + Vec3::new(offset_x, 0.0, offset_z);
-            if is_position_solid(&chunk_manager, feet_pos) {
-                new_pos.y = feet_pos.y.floor() + 1.0 + player_height / 2.0;
-                velocity.0.y = 0.0;
-                physics.on_ground = true;
-                break;
-            }
-        }
-        if physics.on_ground {
-            break;
-        }
-    }
+    // Check collisions with all nearby blocks
+    let mut collisions = Vec::new();
 
-    // Apply gravity after ground check
-    if !physics.on_ground {
-        velocity.0.y += GRAVITY * time.delta_secs();
-        velocity.0.y = velocity.0.y.max(TERMINAL_VELOCITY);
-    } else {
-        // Only reset downward velocity when on ground
-        if velocity.0.y < 0.0 {
-            velocity.0.y = 0.0;
-        }
-    }
-
-    // Ceiling collision check with multiple points
-    for offset_x in [-player_radius, 0.0, player_radius] {
-        for offset_z in [-player_radius, 0.0, player_radius] {
-            let head_pos =
-                new_pos + Vec3::Y * (player_height / 2.0) + Vec3::new(offset_x, 0.0, offset_z);
-            if is_position_solid(&chunk_manager, head_pos) {
-                new_pos.y = head_pos.y.floor() - player_height / 2.0;
-                velocity.0.y = 0.0;
-                break;
-            }
-        }
-    }
-
-    // Horizontal collision checks with sweep test
-    let check_height = player_height / 4.0;
-    for y_offset in [-check_height, 0.0, check_height] {
-        let original_pos = transform.translation;
-        let movement = new_pos - original_pos;
-
-        // Skip if no horizontal movement
-        if movement.x.abs() < 0.0001 && movement.z.abs() < 0.0001 {
-            continue;
-        }
-
-        // Check collisions and get push vector
-        let mut push_out = Vec3::ZERO;
-
-        // Check all corners and edges
-        for &offset_x in &[-player_radius, player_radius] {
-            for &offset_z in &[-player_radius, player_radius] {
-                let check_pos = new_pos + Vec3::new(offset_x, y_offset, offset_z);
-                if is_position_solid(&chunk_manager, check_pos) {
-                    // Calculate push out distances for both axes
-                    let push_x = if offset_x > 0.0 {
-                        check_pos.x.floor() - player_radius - new_pos.x
-                    } else {
-                        check_pos.x.floor() + 1.0 + player_radius - new_pos.x
-                    };
-
-                    let push_z = if offset_z > 0.0 {
-                        check_pos.z.floor() - player_radius - new_pos.z
-                    } else {
-                        check_pos.z.floor() + 1.0 + player_radius - new_pos.z
-                    };
-
-                    // Choose the smallest push that resolves the collision
-                    if push_x.abs() < push_z.abs() {
-                        push_out.x = push_x;
-                        velocity.0.x = 0.0;
-                    } else {
-                        push_out.z = push_z;
-                        velocity.0.z = 0.0;
+    for x in min_block.x..=max_block.x {
+        for y in min_block.y..=max_block.y {
+            for z in min_block.z..=max_block.z {
+                let block_pos = Vec3::new(x as f32, y as f32, z as f32);
+                if is_position_solid(&chunk_manager, block_pos) {
+                    let block_aabb = Aabb::new(block_pos + Vec3::splat(0.5), Vec3::ONE);
+                    if player_aabb.intersects(&block_aabb) {
+                        collisions.push(block_aabb);
                     }
                 }
             }
         }
+    }
 
-        // Apply the push out vector
-        new_pos += push_out;
+    // Reset ground check
+    physics.on_ground = false;
+
+    // Resolve collisions
+    for block in collisions.iter() {
+        let overlap = Vec3::new(
+            if (new_pos.x - block.min.x).abs() < (block.max.x - new_pos.x).abs() {
+                block.min.x - (new_pos.x + PLAYER_SIZE.x * 0.5)
+            } else {
+                block.max.x - (new_pos.x - PLAYER_SIZE.x * 0.5)
+            },
+            if (new_pos.y - block.min.y).abs() < (block.max.y - new_pos.y).abs() {
+                block.min.y - (new_pos.y + PLAYER_SIZE.y * 0.5)
+            } else {
+                block.max.y - (new_pos.y - PLAYER_SIZE.y * 0.5)
+            },
+            if (new_pos.z - block.min.z).abs() < (block.max.z - new_pos.z).abs() {
+                block.min.z - (new_pos.z + PLAYER_SIZE.z * 0.5)
+            } else {
+                block.max.z - (new_pos.z - PLAYER_SIZE.z * 0.5)
+            },
+        );
+
+        let overlap_array = overlap.to_array();
+
+        // Find smallest overlap axis
+        let (axis, value) = overlap_array
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| a.abs().partial_cmp(&b.abs()).unwrap())
+            .unwrap();
+
+        // Apply correction
+        match axis {
+            0 => {
+                new_pos.x += value;
+                velocity.0.x = 0.0;
+            }
+            1 => {
+                new_pos.y += value;
+                if *value > 0.0 {
+                    physics.on_ground = true;
+                }
+                velocity.0.y = 0.0;
+            }
+            2 => {
+                new_pos.z += value;
+                velocity.0.z = 0.0;
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    // Apply gravity if not on ground
+    if !physics.on_ground {
+        velocity.0.y += GRAVITY * time.delta_secs();
+        velocity.0.y = velocity.0.y.max(TERMINAL_VELOCITY);
     }
 
     // Apply final position
@@ -378,23 +389,10 @@ fn voxel_physics(
 
     // Apply drag to horizontal velocity when on ground
     if physics.on_ground {
-        const GROUND_DRAG: f32 = 0.9;
+        const GROUND_DRAG: f32 = 0.97;
         velocity.0.x *= GROUND_DRAG;
         velocity.0.z *= GROUND_DRAG;
     }
-
-    // Debug info
-    info!(
-        "Pos: {:?}, Vel: {:?}, On ground: {}, Chunk: {:?}",
-        transform.translation,
-        velocity.0,
-        physics.on_ground,
-        IVec3::new(
-            (transform.translation.x / 16.0).floor() as i32,
-            (transform.translation.y / 16.0).floor() as i32,
-            (transform.translation.z / 16.0).floor() as i32,
-        )
-    );
 }
 
 // Helper function to check if a world position is inside a solid block
