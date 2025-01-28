@@ -19,6 +19,14 @@ struct ChunkManager {
     chunks: HashMap<IVec3, Chunk>,
 }
 
+#[derive(Component)]
+struct Velocity(Vec3);
+
+#[derive(Component)]
+struct VoxelPhysics {
+    on_ground: bool,
+}
+
 fn main() {
     App::new()
         .add_plugins((
@@ -37,7 +45,15 @@ fn main() {
                 build_chunk_meshes.after(generate_chunks),
             ),
         )
-        .add_systems(Update, (player_look, toggle_grab, player_move))
+        .add_systems(
+            Update,
+            (
+                player_look,
+                toggle_grab,
+                player_move,
+                voxel_physics.after(player_move),
+            ),
+        )
         .run();
 }
 
@@ -52,6 +68,8 @@ fn setup_player(mut commands: Commands) {
         .spawn((
             Player,
             Transform::from_xyz(10.0, 100.0, 10.0),
+            Velocity(Vec3::ZERO),
+            VoxelPhysics { on_ground: false },
             Visibility::Inherited,
         ))
         .with_child((PlayerCamera, Camera3d::default(), Visibility::Inherited));
@@ -121,62 +139,57 @@ fn player_move(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
-    mut query: Query<&mut Transform, (With<Player>, Without<PlayerCamera>)>,
+    mut query: Query<(&mut Velocity, &VoxelPhysics), With<Player>>,
     camera: Query<&Transform, (With<PlayerCamera>, Without<Player>)>,
 ) {
     if let Ok(window) = primary_window.get_single() {
-        let mut player_transform = query.single_mut();
+        let (mut velocity, physics) = query.single_mut();
         let transform = camera.single();
-        let mut velocity = Vec3::ZERO;
+        let mut movement = Vec3::ZERO;
 
         // Get the camera's forward and right vectors
         let forward = transform.forward();
-        // Project forward vector onto XZ plane and normalize
         let forward = Vec3::new(forward.x, 0.0, forward.z).normalize_or_zero();
-        // Get right vector by rotating forward 90 degrees around Y axis
         let right = Vec3::new(-forward.z, 0.0, forward.x);
 
-        // Handle movement input
         if window.cursor_options.grab_mode != CursorGrabMode::None {
             if keys.pressed(KeyCode::KeyW) {
-                velocity += forward;
+                movement += forward;
             }
             if keys.pressed(KeyCode::KeyS) {
-                velocity -= forward;
+                movement -= forward;
             }
             if keys.pressed(KeyCode::KeyA) {
-                velocity -= right;
+                movement -= right;
             }
             if keys.pressed(KeyCode::KeyD) {
-                velocity += right;
+                movement += right;
             }
 
             // Normalize horizontal movement
-            velocity = velocity.normalize_or_zero();
+            movement = movement.normalize_or_zero();
 
-            // Apply movement speed
             const MOVEMENT_SPEED: f32 = 5.0;
-            velocity *= MOVEMENT_SPEED;
+            const JUMP_FORCE: f32 = 8.0;
 
-            // Preserve vertical velocity (for gravity/jumping)
-            velocity.y = player_transform.translation.y;
+            // Apply movement
+            let target_velocity = movement * MOVEMENT_SPEED;
 
-            // Handle vertical movement (temporary flying controls)
-            if keys.pressed(KeyCode::Space) {
-                velocity.y = MOVEMENT_SPEED;
-            }
-            if keys.pressed(KeyCode::ShiftLeft) {
-                velocity.y = -MOVEMENT_SPEED;
+            // Jump when space is pressed and on ground
+            if keys.just_pressed(KeyCode::Space) && physics.on_ground {
+                velocity.0.y = JUMP_FORCE;
             }
 
-            // Smoothly interpolate to target velocity
-            const ACCELERATION: f32 = 20.0;
-            player_transform.translation = player_transform
-                .translation
-                .lerp(velocity, ACCELERATION * time.delta_secs());
+            // Smoothly interpolate horizontal velocity
+            velocity.0.x = velocity
+                .0
+                .x
+                .lerp(target_velocity.x, 10.0 * time.delta_secs());
+            velocity.0.z = velocity
+                .0
+                .z
+                .lerp(target_velocity.z, 10.0 * time.delta_secs());
         }
-    } else {
-        warn!("Primary window not found for `player_move`!");
     }
 }
 
@@ -240,5 +253,98 @@ fn build_chunk_meshes(
                 chunk_pos.z as f32 * 16.0,
             ),
         ));
+    }
+}
+
+fn voxel_physics(
+    time: Res<Time>,
+    chunk_manager: Res<ChunkManager>,
+    mut query: Query<(&mut Transform, &mut Velocity, &mut VoxelPhysics), With<Player>>,
+) {
+    let (mut transform, mut velocity, mut physics) = query.single_mut();
+
+    const GRAVITY: f32 = -20.0;
+    const TERMINAL_VELOCITY: f32 = -30.0;
+
+    // Apply gravity if not on ground
+    if !physics.on_ground {
+        velocity.0.y += GRAVITY * time.delta_secs();
+        velocity.0.y = velocity.0.y.max(TERMINAL_VELOCITY);
+    }
+
+    // Calculate new position
+    let mut new_pos = transform.translation + velocity.0 * time.delta_secs();
+
+    // Player dimensions (width = 0.6, height = 1.8, like Minecraft)
+    let player_width = 0.6;
+    let player_height = 1.8;
+    let player_radius = player_width / 2.0;
+
+    // Check collision points
+    physics.on_ground = false;
+
+    // Floor collision check
+    let feet_pos = new_pos - Vec3::Y * (player_height / 2.0);
+    if is_position_solid(&chunk_manager, feet_pos) {
+        new_pos.y = feet_pos.y.floor() + 1.0 + player_height / 2.0;
+        velocity.0.y = 0.0;
+        physics.on_ground = true;
+    }
+
+    // Ceiling collision check
+    let head_pos = new_pos + Vec3::Y * (player_height / 2.0);
+    if is_position_solid(&chunk_manager, head_pos) {
+        new_pos.y = head_pos.y.floor() - player_height / 2.0;
+        velocity.0.y = 0.0;
+    }
+
+    // Horizontal collision checks (simplified AABB)
+    for offset_x in [-player_radius, player_radius] {
+        for offset_z in [-player_radius, player_radius] {
+            let check_pos = new_pos + Vec3::new(offset_x, 0.0, offset_z);
+            if is_position_solid(&chunk_manager, check_pos) {
+                // Push out of the block
+                if offset_x.abs() > offset_z.abs() {
+                    new_pos.x = check_pos.x.floor()
+                        + (if offset_x < 0.0 {
+                            1.0 + player_radius
+                        } else {
+                            -player_radius
+                        });
+                    velocity.0.x = 0.0;
+                } else {
+                    new_pos.z = check_pos.z.floor()
+                        + (if offset_z < 0.0 {
+                            1.0 + player_radius
+                        } else {
+                            -player_radius
+                        });
+                    velocity.0.z = 0.0;
+                }
+            }
+        }
+    }
+
+    transform.translation = new_pos;
+}
+
+// Helper function to check if a world position is inside a solid block
+fn is_position_solid(chunk_manager: &ChunkManager, pos: Vec3) -> bool {
+    let block_pos = pos.floor();
+    let chunk_pos = IVec3::new(
+        (block_pos.x / 16.0).floor() as i32,
+        (block_pos.y / 16.0).floor() as i32,
+        (block_pos.z / 16.0).floor() as i32,
+    );
+
+    if let Some(chunk) = chunk_manager.chunks.get(&chunk_pos) {
+        let local_pos = UVec3::new(
+            (block_pos.x.rem_euclid(16.0)) as u32,
+            (block_pos.y.rem_euclid(16.0)) as u32,
+            (block_pos.z.rem_euclid(16.0)) as u32,
+        );
+        chunk.get(local_pos).is_solid()
+    } else {
+        false
     }
 }
