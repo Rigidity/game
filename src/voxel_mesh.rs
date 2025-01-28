@@ -55,61 +55,61 @@ impl VoxelMesh {
         pos: UVec3,
         corner: VoxelCorner,
         face: VoxelFace,
-        texture_index: u32,
+        color: u32,
     ) -> u32 {
         let x = (pos.x & 0x0F) << 28;
         let y = (pos.y & 0x0F) << 24;
         let z = (pos.z & 0x0F) << 20;
         let corner = (corner.to_index()) << 18;
-        let face = (face as u32) << 15; // 3 bits for face (0-5)
-        let texture_index = texture_index & 0x7FFF; // Reduced to 15 bits
-        let voxel = x | y | z | corner | face | texture_index;
+        let face = (face as u32) << 15;
+        let color = color & 0x7FFF;
+        let voxel = x | y | z | corner | face | color;
         self.voxels.push(voxel);
         self.voxels.len() as u32 - 1
     }
 
-    pub fn add_face(&mut self, pos: UVec3, face: VoxelFace, texture_index: u32) {
+    pub fn add_face(&mut self, pos: UVec3, face: VoxelFace, color: u32) {
         match face {
             VoxelFace::Top => {
-                let a = self.add_vertex(pos, VoxelCorner::BottomLeft, face, texture_index);
-                let b = self.add_vertex(pos, VoxelCorner::BottomRight, face, texture_index);
-                let c = self.add_vertex(pos, VoxelCorner::TopRight, face, texture_index);
-                let d = self.add_vertex(pos, VoxelCorner::TopLeft, face, texture_index);
+                let a = self.add_vertex(pos, VoxelCorner::BottomLeft, face, color);
+                let b = self.add_vertex(pos, VoxelCorner::BottomRight, face, color);
+                let c = self.add_vertex(pos, VoxelCorner::TopRight, face, color);
+                let d = self.add_vertex(pos, VoxelCorner::TopLeft, face, color);
                 self.add_indices([a, b, c, a, c, d]);
             }
             VoxelFace::Bottom => {
-                let a = self.add_vertex(pos, VoxelCorner::BottomLeft, face, texture_index);
-                let b = self.add_vertex(pos, VoxelCorner::BottomRight, face, texture_index);
-                let c = self.add_vertex(pos, VoxelCorner::TopRight, face, texture_index);
-                let d = self.add_vertex(pos, VoxelCorner::TopLeft, face, texture_index);
+                let a = self.add_vertex(pos, VoxelCorner::BottomLeft, face, color);
+                let b = self.add_vertex(pos, VoxelCorner::BottomRight, face, color);
+                let c = self.add_vertex(pos, VoxelCorner::TopRight, face, color);
+                let d = self.add_vertex(pos, VoxelCorner::TopLeft, face, color);
                 self.add_indices([a, c, b, a, d, c]);
             }
             VoxelFace::Left => {
-                let a = self.add_vertex(pos, VoxelCorner::BottomLeft, face, texture_index);
-                let b = self.add_vertex(pos, VoxelCorner::TopLeft, face, texture_index);
-                let c = self.add_vertex(pos, VoxelCorner::TopRight, face, texture_index);
-                let d = self.add_vertex(pos, VoxelCorner::BottomRight, face, texture_index);
+                let a = self.add_vertex(pos, VoxelCorner::BottomLeft, face, color);
+                let b = self.add_vertex(pos, VoxelCorner::TopLeft, face, color);
+                let c = self.add_vertex(pos, VoxelCorner::TopRight, face, color);
+                let d = self.add_vertex(pos, VoxelCorner::BottomRight, face, color);
                 self.add_indices([a, b, c, a, c, d]);
             }
             VoxelFace::Right => {
-                let a = self.add_vertex(pos, VoxelCorner::BottomLeft, face, texture_index);
-                let b = self.add_vertex(pos, VoxelCorner::TopLeft, face, texture_index);
-                let c = self.add_vertex(pos, VoxelCorner::TopRight, face, texture_index);
-                let d = self.add_vertex(pos, VoxelCorner::BottomRight, face, texture_index);
+                let a = self.add_vertex(pos, VoxelCorner::BottomLeft, face, color);
+                let b = self.add_vertex(pos, VoxelCorner::TopLeft, face, color);
+                let c = self.add_vertex(pos, VoxelCorner::TopRight, face, color);
+                let d = self.add_vertex(pos, VoxelCorner::BottomRight, face, color);
                 self.add_indices([a, c, b, a, d, c]);
             }
             VoxelFace::Front => {
-                let a = self.add_vertex(pos, VoxelCorner::BottomLeft, face, texture_index);
-                let b = self.add_vertex(pos, VoxelCorner::TopLeft, face, texture_index);
-                let c = self.add_vertex(pos, VoxelCorner::TopRight, face, texture_index);
-                let d = self.add_vertex(pos, VoxelCorner::BottomRight, face, texture_index);
+                let a = self.add_vertex(pos, VoxelCorner::BottomLeft, face, color);
+                let b = self.add_vertex(pos, VoxelCorner::TopLeft, face, color);
+                let c = self.add_vertex(pos, VoxelCorner::TopRight, face, color);
+                let d = self.add_vertex(pos, VoxelCorner::BottomRight, face, color);
                 self.add_indices([a, b, c, a, c, d]);
             }
             VoxelFace::Back => {
-                let a = self.add_vertex(pos, VoxelCorner::BottomLeft, face, texture_index);
-                let b = self.add_vertex(pos, VoxelCorner::TopLeft, face, texture_index);
-                let c = self.add_vertex(pos, VoxelCorner::TopRight, face, texture_index);
-                let d = self.add_vertex(pos, VoxelCorner::BottomRight, face, texture_index);
+                let a = self.add_vertex(pos, VoxelCorner::BottomLeft, face, color);
+                let b = self.add_vertex(pos, VoxelCorner::TopLeft, face, color);
+                let c = self.add_vertex(pos, VoxelCorner::TopRight, face, color);
+                let d = self.add_vertex(pos, VoxelCorner::BottomRight, face, color);
                 self.add_indices([a, c, b, a, d, c]);
             }
         }

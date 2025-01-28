@@ -1,9 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{
-    assets::VoxelAssets,
-    voxel_mesh::{VoxelFace, VoxelMesh},
-};
+use crate::voxel_mesh::{VoxelFace, VoxelMesh};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlockFaces {
@@ -58,7 +55,7 @@ impl Block {
                     VoxelFace::Bottom,
                 ] {
                     if faces.get(face) {
-                        mesh.add_face(position, face, VoxelAssets::rock());
+                        mesh.add_face(position, face, 0);
                     }
                 }
             }
