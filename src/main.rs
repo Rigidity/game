@@ -3,7 +3,6 @@ mod chunk;
 mod voxel_material;
 mod voxel_mesh;
 
-use avian3d::prelude::*;
 use bevy::{
     input::mouse::MouseMotion,
     prelude::*,
@@ -25,7 +24,6 @@ fn main() {
         .add_plugins((
             DefaultPlugins.set(ImagePlugin::default_nearest()),
             MaterialPlugin::<VoxelMaterial>::default(),
-            PhysicsPlugins::default(),
         ))
         .insert_resource(ChunkManager {
             chunks: HashMap::new(),
@@ -54,13 +52,6 @@ fn setup_player(mut commands: Commands) {
         .spawn((
             Player,
             Transform::from_xyz(10.0, 100.0, 10.0),
-            // The player character needs to be configured as a dynamic rigid body of the physics
-            // engine.
-            RigidBody::Dynamic,
-            Collider::capsule(0.5, 1.0),
-            // Tnua can fix the rotation, but the character will still get rotated before it can do so.
-            // By locking the rotation we can prevent this.
-            LockedAxes::ROTATION_LOCKED,
             Visibility::Inherited,
         ))
         .with_child((PlayerCamera, Camera3d::default(), Visibility::Inherited));
@@ -130,11 +121,11 @@ fn player_move(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
-    mut query: Query<&mut LinearVelocity, With<Player>>,
-    camera: Query<&Transform, With<PlayerCamera>>,
+    mut query: Query<&mut Transform, (With<Player>, Without<PlayerCamera>)>,
+    camera: Query<&Transform, (With<PlayerCamera>, Without<Player>)>,
 ) {
     if let Ok(window) = primary_window.get_single() {
-        let mut linear_velocity = query.single_mut();
+        let mut player_transform = query.single_mut();
         let transform = camera.single();
         let mut velocity = Vec3::ZERO;
 
@@ -168,7 +159,7 @@ fn player_move(
             velocity *= MOVEMENT_SPEED;
 
             // Preserve vertical velocity (for gravity/jumping)
-            velocity.y = linear_velocity.0.y;
+            velocity.y = player_transform.translation.y;
 
             // Handle vertical movement (temporary flying controls)
             if keys.pressed(KeyCode::Space) {
@@ -180,8 +171,8 @@ fn player_move(
 
             // Smoothly interpolate to target velocity
             const ACCELERATION: f32 = 20.0;
-            linear_velocity.0 = linear_velocity
-                .0
+            player_transform.translation = player_transform
+                .translation
                 .lerp(velocity, ACCELERATION * time.delta_secs());
         }
     } else {
@@ -238,9 +229,9 @@ fn build_chunk_meshes(
     let material = materials.add(VoxelMaterial {});
 
     for (&chunk_pos, chunk) in chunk_manager.chunks.iter() {
-        let (mesh, collider) = chunk.render(&chunk_manager.chunks, chunk_pos).build();
+        let mesh = chunk.render(&chunk_manager.chunks, chunk_pos).build();
 
-        let mut entity = commands.spawn((
+        commands.spawn((
             Mesh3d(meshes.add(mesh)),
             MeshMaterial3d(material.clone()),
             Transform::from_xyz(
@@ -249,9 +240,5 @@ fn build_chunk_meshes(
                 chunk_pos.z as f32 * 16.0,
             ),
         ));
-
-        if let Some(collider) = collider {
-            entity.insert((collider, RigidBody::Static, CollisionMargin(0.5)));
-        }
     }
 }

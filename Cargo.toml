@@ -8,7 +8,6 @@ default = ["dev"]
 dev = ["bevy/dynamic_linking"]
 
 [dependencies]
-avian3d = { version = "0.2.1", features = ["collider-from-mesh"] }
 bevy = "0.15.1"
 noise = "0.9.0"
 

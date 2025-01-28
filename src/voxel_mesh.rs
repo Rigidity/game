@@ -1,4 +1,3 @@
-use avian3d::prelude::*;
 use bevy::{
     asset::RenderAssetUsages,
     prelude::*,
@@ -126,22 +125,10 @@ impl VoxelMesh {
         self.indices.extend(indices);
     }
 
-    pub fn build(self) -> (Mesh, Option<Collider>) {
+    pub fn build(self) -> Mesh {
         let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
         mesh.insert_attribute(Self::VOXEL, self.voxels);
         mesh.insert_indices(Indices::U32(self.indices.clone()));
-
-        let collider = if self.positions.is_empty() {
-            None
-        } else {
-            let mut collider_mesh =
-                Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
-            collider_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, self.positions);
-            collider_mesh.insert_indices(Indices::U32(self.indices));
-
-            Some(Collider::trimesh_from_mesh(&collider_mesh).unwrap())
-        };
-
-        (mesh, collider)
+        mesh
     }
 }
