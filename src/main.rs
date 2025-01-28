@@ -328,49 +328,49 @@ fn voxel_physics(
     // Horizontal collision checks with sweep test
     let check_height = player_height / 4.0;
     for y_offset in [-check_height, 0.0, check_height] {
-        // First sweep X
-        let x_movement = Vec3::new(new_pos.x - transform.translation.x, 0.0, 0.0);
-        if x_movement.length_squared() > 0.0 {
-            for z_check in [-player_radius, 0.0, player_radius] {
-                for &offset_x in &[-player_radius, player_radius] {
-                    let check_pos =
-                        transform.translation + x_movement + Vec3::new(offset_x, y_offset, z_check);
-                    if is_position_solid(&chunk_manager, check_pos) {
-                        new_pos.x = check_pos.x.floor()
-                            + (if offset_x < 0.0 {
-                                1.0 + player_radius
-                            } else {
-                                -player_radius
-                            });
+        let original_pos = transform.translation;
+        let movement = new_pos - original_pos;
+
+        // Skip if no horizontal movement
+        if movement.x.abs() < 0.0001 && movement.z.abs() < 0.0001 {
+            continue;
+        }
+
+        // Check collisions and get push vector
+        let mut push_out = Vec3::ZERO;
+
+        // Check all corners and edges
+        for &offset_x in &[-player_radius, player_radius] {
+            for &offset_z in &[-player_radius, player_radius] {
+                let check_pos = new_pos + Vec3::new(offset_x, y_offset, offset_z);
+                if is_position_solid(&chunk_manager, check_pos) {
+                    // Calculate push out distances for both axes
+                    let push_x = if offset_x > 0.0 {
+                        check_pos.x.floor() - player_radius - new_pos.x
+                    } else {
+                        check_pos.x.floor() + 1.0 + player_radius - new_pos.x
+                    };
+
+                    let push_z = if offset_z > 0.0 {
+                        check_pos.z.floor() - player_radius - new_pos.z
+                    } else {
+                        check_pos.z.floor() + 1.0 + player_radius - new_pos.z
+                    };
+
+                    // Choose the smallest push that resolves the collision
+                    if push_x.abs() < push_z.abs() {
+                        push_out.x = push_x;
                         velocity.0.x = 0.0;
-                        break;
+                    } else {
+                        push_out.z = push_z;
+                        velocity.0.z = 0.0;
                     }
                 }
             }
         }
 
-        // Then sweep Z with updated X position
-        let z_movement = Vec3::new(0.0, 0.0, new_pos.z - transform.translation.z);
-        if z_movement.length_squared() > 0.0 {
-            for x_check in [-player_radius, 0.0, player_radius] {
-                for &offset_z in &[-player_radius, player_radius] {
-                    let check_pos =
-                        Vec3::new(new_pos.x, transform.translation.y, transform.translation.z)
-                            + z_movement
-                            + Vec3::new(x_check, y_offset, offset_z);
-                    if is_position_solid(&chunk_manager, check_pos) {
-                        new_pos.z = check_pos.z.floor()
-                            + (if offset_z < 0.0 {
-                                1.0 + player_radius
-                            } else {
-                                -player_radius
-                            });
-                        velocity.0.z = 0.0;
-                        break;
-                    }
-                }
-            }
-        }
+        // Apply the push out vector
+        new_pos += push_out;
     }
 
     // Apply final position
