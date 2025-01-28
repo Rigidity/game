@@ -1,5 +1,7 @@
 use bevy::prelude::*;
+use bevy::utils::HashMap;
 
+use crate::chunk::Chunk;
 use crate::voxel_mesh::{VoxelFace, VoxelMesh};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,7 +44,15 @@ impl Block {
         !self.is_air()
     }
 
-    pub fn render(&self, mesh: &mut VoxelMesh, faces: BlockFaces, position: UVec3) {
+    pub fn render(
+        &self,
+        mesh: &mut VoxelMesh,
+        faces: BlockFaces,
+        position: UVec3,
+        chunk: &Chunk,
+        chunks: &HashMap<IVec3, Chunk>,
+        chunk_pos: IVec3,
+    ) {
         match self {
             Self::Air => {}
             Self::Rock => {
@@ -55,7 +65,8 @@ impl Block {
                     VoxelFace::Bottom,
                 ] {
                     if faces.get(face) {
-                        mesh.add_face(position, face, 0);
+                        let ao = chunk.get_ao(chunks, chunk_pos, position, face);
+                        mesh.add_face(position, face, 0, ao);
                     }
                 }
             }

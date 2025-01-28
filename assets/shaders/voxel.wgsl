@@ -6,10 +6,11 @@ struct Vertex {
 }
 
 struct VertexOutput {
-   @builtin(position) clip_position: vec4<f32>,
-   @location(0) world_position: vec4<f32>,
-   @location(1) uv: vec2<f32>,
-   @location(2) color: u32,
+    @builtin(position) clip_position: vec4<f32>,
+    @location(0) world_position: vec4<f32>,
+    @location(1) uv: vec2<f32>,
+    @location(2) color: u32,
+    @location(3) ao: f32,
 }
 
 @vertex
@@ -19,7 +20,8 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     let z = f32((vertex.packed >> 20) & 0xF);
     let corner = (vertex.packed >> 18) & 0x3;
     let face = (vertex.packed >> 15) & 0x7;
-    let color = vertex.packed & 0x7FFF;
+    let ao = f32((vertex.packed >> 13) & 0x3) / 3.0;  // Unpack AO from bits 13-14
+    let color = vertex.packed & 0x1FFF;  // Get remaining 13 bits for color
 
     var final_pos = vec3<f32>(x, y, z);
     
@@ -68,10 +70,13 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     out.world_position = vec4<f32>(final_pos, 1.0);
     out.uv = uv;
     out.color = color;
+    out.ao = ao;
     return out;
 }
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4<f32>(1.0, 1.0, 1.0, 1.0);
+    // Apply AO darkening
+    let ao_factor = mix(0.6, 1.0, in.ao);
+    return vec4<f32>(ao_factor, ao_factor, ao_factor, 1.0);
 }

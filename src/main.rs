@@ -3,12 +3,11 @@ mod chunk;
 mod voxel_material;
 mod voxel_mesh;
 
-use bevy::prelude::*;
+use bevy::{prelude::*, utils::HashMap};
 use bevy_flycam::PlayerPlugin;
 use block::Block;
 use chunk::Chunk;
 use noise::{NoiseFn, Perlin};
-use std::collections::HashMap;
 use voxel_material::VoxelMaterial;
 
 #[derive(Resource)]
