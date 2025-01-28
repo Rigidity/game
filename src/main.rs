@@ -72,7 +72,12 @@ fn setup_player(mut commands: Commands) {
             VoxelPhysics { on_ground: false },
             Visibility::Inherited,
         ))
-        .with_child((PlayerCamera, Camera3d::default(), Visibility::Inherited));
+        .with_child((
+            PlayerCamera,
+            Camera3d::default(),
+            Transform::from_xyz(0.0, 1.6, 0.0),
+            Visibility::Inherited,
+        ));
 }
 
 fn toggle_grab(
@@ -176,19 +181,20 @@ fn player_move(
             let target_velocity = movement * MOVEMENT_SPEED;
 
             // Jump when space is pressed and on ground
-            if keys.just_pressed(KeyCode::Space) && physics.on_ground {
+            if keys.pressed(KeyCode::Space) && physics.on_ground {
                 velocity.0.y = JUMP_FORCE;
             }
 
             // Smoothly interpolate horizontal velocity
+            let acceleration = if physics.on_ground { 10.0 } else { 2.0 };
             velocity.0.x = velocity
                 .0
                 .x
-                .lerp(target_velocity.x, 10.0 * time.delta_secs());
+                .lerp(target_velocity.x, acceleration * time.delta_secs());
             velocity.0.z = velocity
                 .0
                 .z
-                .lerp(target_velocity.z, 10.0 * time.delta_secs());
+                .lerp(target_velocity.z, acceleration * time.delta_secs());
         }
     }
 }
@@ -266,85 +272,166 @@ fn voxel_physics(
     const GRAVITY: f32 = -20.0;
     const TERMINAL_VELOCITY: f32 = -30.0;
 
-    // Apply gravity if not on ground
-    if !physics.on_ground {
-        velocity.0.y += GRAVITY * time.delta_secs();
-        velocity.0.y = velocity.0.y.max(TERMINAL_VELOCITY);
-    }
-
-    // Calculate new position
+    // Calculate new position first
     let mut new_pos = transform.translation + velocity.0 * time.delta_secs();
 
-    // Player dimensions (width = 0.6, height = 1.8, like Minecraft)
-    let player_width = 0.6;
+    // Player dimensions (slightly larger than visual size for better collision)
+    let player_width = 0.8; // Increased from 0.6 for better collision
     let player_height = 1.8;
     let player_radius = player_width / 2.0;
 
-    // Check collision points
+    // Reset ground check
     physics.on_ground = false;
 
-    // Floor collision check
-    let feet_pos = new_pos - Vec3::Y * (player_height / 2.0);
-    if is_position_solid(&chunk_manager, feet_pos) {
-        new_pos.y = feet_pos.y.floor() + 1.0 + player_height / 2.0;
-        velocity.0.y = 0.0;
-        physics.on_ground = true;
+    // Floor collision check with multiple points
+    for offset_x in [-player_radius, 0.0, player_radius] {
+        for offset_z in [-player_radius, 0.0, player_radius] {
+            // Check slightly below feet for better ground detection
+            let feet_pos = new_pos - Vec3::Y * (player_height / 2.0 + 0.01)
+                + Vec3::new(offset_x, 0.0, offset_z);
+            if is_position_solid(&chunk_manager, feet_pos) {
+                new_pos.y = feet_pos.y.floor() + 1.0 + player_height / 2.0;
+                velocity.0.y = 0.0;
+                physics.on_ground = true;
+                break;
+            }
+        }
+        if physics.on_ground {
+            break;
+        }
     }
 
-    // Ceiling collision check
-    let head_pos = new_pos + Vec3::Y * (player_height / 2.0);
-    if is_position_solid(&chunk_manager, head_pos) {
-        new_pos.y = head_pos.y.floor() - player_height / 2.0;
-        velocity.0.y = 0.0;
+    // Apply gravity after ground check
+    if !physics.on_ground {
+        velocity.0.y += GRAVITY * time.delta_secs();
+        velocity.0.y = velocity.0.y.max(TERMINAL_VELOCITY);
+    } else {
+        // Only reset downward velocity when on ground
+        if velocity.0.y < 0.0 {
+            velocity.0.y = 0.0;
+        }
     }
 
-    // Horizontal collision checks (simplified AABB)
-    for offset_x in [-player_radius, player_radius] {
-        for offset_z in [-player_radius, player_radius] {
-            let check_pos = new_pos + Vec3::new(offset_x, 0.0, offset_z);
-            if is_position_solid(&chunk_manager, check_pos) {
-                // Push out of the block
-                if offset_x.abs() > offset_z.abs() {
-                    new_pos.x = check_pos.x.floor()
-                        + (if offset_x < 0.0 {
-                            1.0 + player_radius
-                        } else {
-                            -player_radius
-                        });
-                    velocity.0.x = 0.0;
-                } else {
-                    new_pos.z = check_pos.z.floor()
-                        + (if offset_z < 0.0 {
-                            1.0 + player_radius
-                        } else {
-                            -player_radius
-                        });
-                    velocity.0.z = 0.0;
+    // Ceiling collision check with multiple points
+    for offset_x in [-player_radius, 0.0, player_radius] {
+        for offset_z in [-player_radius, 0.0, player_radius] {
+            let head_pos =
+                new_pos + Vec3::Y * (player_height / 2.0) + Vec3::new(offset_x, 0.0, offset_z);
+            if is_position_solid(&chunk_manager, head_pos) {
+                new_pos.y = head_pos.y.floor() - player_height / 2.0;
+                velocity.0.y = 0.0;
+                break;
+            }
+        }
+    }
+
+    // Horizontal collision checks with sweep test
+    let check_height = player_height / 4.0;
+    for y_offset in [-check_height, 0.0, check_height] {
+        // First sweep X
+        let x_movement = Vec3::new(new_pos.x - transform.translation.x, 0.0, 0.0);
+        if x_movement.length_squared() > 0.0 {
+            for z_check in [-player_radius, 0.0, player_radius] {
+                for &offset_x in &[-player_radius, player_radius] {
+                    let check_pos =
+                        transform.translation + x_movement + Vec3::new(offset_x, y_offset, z_check);
+                    if is_position_solid(&chunk_manager, check_pos) {
+                        new_pos.x = check_pos.x.floor()
+                            + (if offset_x < 0.0 {
+                                1.0 + player_radius
+                            } else {
+                                -player_radius
+                            });
+                        velocity.0.x = 0.0;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Then sweep Z with updated X position
+        let z_movement = Vec3::new(0.0, 0.0, new_pos.z - transform.translation.z);
+        if z_movement.length_squared() > 0.0 {
+            for x_check in [-player_radius, 0.0, player_radius] {
+                for &offset_z in &[-player_radius, player_radius] {
+                    let check_pos =
+                        Vec3::new(new_pos.x, transform.translation.y, transform.translation.z)
+                            + z_movement
+                            + Vec3::new(x_check, y_offset, offset_z);
+                    if is_position_solid(&chunk_manager, check_pos) {
+                        new_pos.z = check_pos.z.floor()
+                            + (if offset_z < 0.0 {
+                                1.0 + player_radius
+                            } else {
+                                -player_radius
+                            });
+                        velocity.0.z = 0.0;
+                        break;
+                    }
                 }
             }
         }
     }
 
+    // Apply final position
     transform.translation = new_pos;
+
+    // Apply drag to horizontal velocity when on ground
+    if physics.on_ground {
+        const GROUND_DRAG: f32 = 0.9;
+        velocity.0.x *= GROUND_DRAG;
+        velocity.0.z *= GROUND_DRAG;
+    }
+
+    // Debug info
+    info!(
+        "Pos: {:?}, Vel: {:?}, On ground: {}, Chunk: {:?}",
+        transform.translation,
+        velocity.0,
+        physics.on_ground,
+        IVec3::new(
+            (transform.translation.x / 16.0).floor() as i32,
+            (transform.translation.y / 16.0).floor() as i32,
+            (transform.translation.z / 16.0).floor() as i32,
+        )
+    );
 }
 
 // Helper function to check if a world position is inside a solid block
 fn is_position_solid(chunk_manager: &ChunkManager, pos: Vec3) -> bool {
-    let block_pos = pos.floor();
-    let chunk_pos = IVec3::new(
-        (block_pos.x / 16.0).floor() as i32,
-        (block_pos.y / 16.0).floor() as i32,
-        (block_pos.z / 16.0).floor() as i32,
-    );
+    // Convert world position to block position (using floor for negative numbers)
+    let block_x = pos.x.floor();
+    let block_y = pos.y.floor();
+    let block_z = pos.z.floor();
+
+    // Calculate chunk position
+    let chunk_x = if block_x < 0.0 {
+        ((block_x + 1.0) / 16.0).floor() as i32 - 1
+    } else {
+        (block_x / 16.0).floor() as i32
+    };
+    let chunk_y = if block_y < 0.0 {
+        ((block_y + 1.0) / 16.0).floor() as i32 - 1
+    } else {
+        (block_y / 16.0).floor() as i32
+    };
+    let chunk_z = if block_z < 0.0 {
+        ((block_z + 1.0) / 16.0).floor() as i32 - 1
+    } else {
+        (block_z / 16.0).floor() as i32
+    };
+
+    let chunk_pos = IVec3::new(chunk_x, chunk_y, chunk_z);
 
     if let Some(chunk) = chunk_manager.chunks.get(&chunk_pos) {
-        let local_pos = UVec3::new(
-            (block_pos.x.rem_euclid(16.0)) as u32,
-            (block_pos.y.rem_euclid(16.0)) as u32,
-            (block_pos.z.rem_euclid(16.0)) as u32,
-        );
+        // Calculate local position within chunk
+        let local_x = ((block_x.rem_euclid(16.0)) as i32).rem_euclid(16) as u32;
+        let local_y = ((block_y.rem_euclid(16.0)) as i32).rem_euclid(16) as u32;
+        let local_z = ((block_z.rem_euclid(16.0)) as i32).rem_euclid(16) as u32;
+        let local_pos = UVec3::new(local_x, local_y, local_z);
+
         chunk.get(local_pos).is_solid()
     } else {
-        false
+        false // Changed to false to allow falling in void
     }
 }
