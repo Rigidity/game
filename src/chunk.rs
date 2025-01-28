@@ -135,30 +135,128 @@ impl Chunk {
         pos: UVec3,
         face: VoxelFace,
     ) -> [u32; 4] {
+        let pos = IVec3::new(pos.x as i32, pos.y as i32, pos.z as i32);
         match face {
             VoxelFace::Top => {
-                let pos = IVec3::new(pos.x as i32, pos.y as i32, pos.z as i32);
                 let [s1, s2, s3, s4] = [
-                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(0, 1, 1)), // front
-                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, 1, 0)), // right
                     self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(0, 1, -1)), // back
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, 1, 0)),  // right
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(0, 1, 1)),  // front
                     self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, 1, 0)), // left
                 ];
                 let [c1, c2, c3, c4] = [
-                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, 1, 1)), // front-right
-                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, 1, -1)), // back-right
                     self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, 1, -1)), // back-left
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, 1, -1)), // back-right
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, 1, 1)), // front-right
                     self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, 1, 1)), // front-left
                 ];
-
                 [
-                    Self::calculate_corner_ao(s4, s1, c4),
-                    Self::calculate_corner_ao(s2, s1, c1),
-                    Self::calculate_corner_ao(s2, s3, c2),
-                    Self::calculate_corner_ao(s4, s3, c3),
+                    Self::calculate_corner_ao(s4, s3, c4), // front-left
+                    Self::calculate_corner_ao(s2, s3, c3), // front-right
+                    Self::calculate_corner_ao(s2, s1, c2), // back-right
+                    Self::calculate_corner_ao(s4, s1, c1), // back-left
                 ]
             }
-            _ => [2, 2, 2, 2],
+            VoxelFace::Bottom => {
+                let [s1, s2, s3, s4] = [
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(0, -1, -1)), // back
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, -1, 0)),  // right
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(0, -1, 1)),  // front
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, -1, 0)), // left
+                ];
+                let [c1, c2, c3, c4] = [
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, -1, -1)), // back-left
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, -1, -1)), // back-right
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, -1, 1)), // front-right
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, -1, 1)), // front-left
+                ];
+                [
+                    Self::calculate_corner_ao(s4, s3, c4), // front-left
+                    Self::calculate_corner_ao(s2, s3, c3), // front-right
+                    Self::calculate_corner_ao(s2, s1, c2), // back-right
+                    Self::calculate_corner_ao(s4, s1, c1), // back-left
+                ]
+            }
+            VoxelFace::Left => {
+                let [s1, s2, s3, s4] = [
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, 0, -1)), // back
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, 1, 0)),  // top
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, 0, 1)),  // front
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, -1, 0)), // bottom
+                ];
+                let [c1, c2, c3, c4] = [
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, -1, -1)), // bottom-back
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, 1, -1)), // top-back
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, 1, 1)), // top-front
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, -1, 1)), // bottom-front
+                ];
+                [
+                    Self::calculate_corner_ao(s2, s1, c2), // top-back
+                    Self::calculate_corner_ao(s4, s1, c1), // bottom-back
+                    Self::calculate_corner_ao(s4, s3, c4), // bottom-front
+                    Self::calculate_corner_ao(s2, s3, c3), // top-front
+                ]
+            }
+            VoxelFace::Right => {
+                let [s1, s2, s3, s4] = [
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, 0, -1)), // back
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, 1, 0)),  // top
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, 0, 1)),  // front
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, -1, 0)), // bottom
+                ];
+                let [c1, c2, c3, c4] = [
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, -1, -1)), // bottom-back
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, 1, -1)), // top-back
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, 1, 1)), // top-front
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, -1, 1)), // bottom-front
+                ];
+                [
+                    Self::calculate_corner_ao(s2, s1, c2), // top-back (TopLeft)
+                    Self::calculate_corner_ao(s4, s1, c1), // bottom-back (BottomLeft)
+                    Self::calculate_corner_ao(s4, s3, c4), // bottom-front (BottomRight)
+                    Self::calculate_corner_ao(s2, s3, c3), // top-front (TopRight)
+                ]
+            }
+            VoxelFace::Front => {
+                let [s1, s2, s3, s4] = [
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(0, -1, 1)), // bottom
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, 0, 1)),  // right
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(0, 1, 1)),  // top
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, 0, 1)), // left
+                ];
+                let [c1, c2, c3, c4] = [
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, -1, 1)), // bottom-left
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, -1, 1)), // bottom-right
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, 1, 1)), // top-right
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, 1, 1)), // top-left
+                ];
+                [
+                    Self::calculate_corner_ao(s4, s3, c4), // top-left
+                    Self::calculate_corner_ao(s4, s1, c1), // bottom-left
+                    Self::calculate_corner_ao(s2, s1, c2), // bottom-right
+                    Self::calculate_corner_ao(s2, s3, c3), // top-right
+                ]
+            }
+            VoxelFace::Back => {
+                let [s1, s2, s3, s4] = [
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, 0, -1)), // left
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(0, 1, -1)),  // top
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, 0, -1)),  // right
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(0, -1, -1)), // bottom
+                ];
+                let [c1, c2, c3, c4] = [
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, -1, -1)), // bottom-left
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, -1, -1)), // bottom-right
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(1, 1, -1)), // top-right
+                    self.is_neighbor_solid(chunks, chunk_pos, pos + IVec3::new(-1, 1, -1)), // top-left
+                ];
+                [
+                    Self::calculate_corner_ao(s2, s1, c4), // top-left
+                    Self::calculate_corner_ao(s4, s1, c1), // bottom-left
+                    Self::calculate_corner_ao(s4, s3, c2), // bottom-right
+                    Self::calculate_corner_ao(s2, s3, c3), // top-right
+                ]
+            }
         }
     }
 
@@ -178,12 +276,32 @@ impl Chunk {
         chunk_pos: IVec3,
         pos: IVec3,
     ) -> bool {
+        // Calculate chunk offset by flooring division
         let chunk_offset = IVec3::new(
-            (pos.x / CHUNK_SIZE as i32).clamp(-1, 1),
-            (pos.y / CHUNK_SIZE as i32).clamp(-1, 1),
-            (pos.z / CHUNK_SIZE as i32).clamp(-1, 1),
+            if pos.x < 0 {
+                -1
+            } else if pos.x >= CHUNK_SIZE as i32 {
+                1
+            } else {
+                0
+            },
+            if pos.y < 0 {
+                -1
+            } else if pos.y >= CHUNK_SIZE as i32 {
+                1
+            } else {
+                0
+            },
+            if pos.z < 0 {
+                -1
+            } else if pos.z >= CHUNK_SIZE as i32 {
+                1
+            } else {
+                0
+            },
         );
 
+        // Calculate block position within the chunk
         let block_pos = UVec3::new(
             pos.x.rem_euclid(CHUNK_SIZE as i32) as u32,
             pos.y.rem_euclid(CHUNK_SIZE as i32) as u32,
