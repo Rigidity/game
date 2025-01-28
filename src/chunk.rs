@@ -99,7 +99,7 @@ impl Chunk {
 
     fn get_neighbor_positions(pos: UVec3, dx: i32, dy: i32, dz: i32) -> (IVec3, UVec3) {
         let mut chunk_offset = IVec3::ZERO;
-        let mut block_pos = UVec3::new(pos.x as u32, pos.y as u32, pos.z as u32);
+        let mut block_pos = UVec3::new(pos.x, pos.y, pos.z);
 
         // Handle x direction
         if (pos.x == 0 && dx < 0) || (pos.x == CHUNK_SIZE - 1 && dx > 0) {

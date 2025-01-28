@@ -1,8 +1,9 @@
+use avian3d::prelude::*;
 use bevy::{
     asset::RenderAssetUsages,
-    math::UVec3,
+    prelude::*,
     render::{
-        mesh::{Indices, Mesh, MeshVertexAttribute, PrimitiveTopology},
+        mesh::{Indices, MeshVertexAttribute, PrimitiveTopology},
         render_resource::VertexFormat,
     },
 };
@@ -40,6 +41,7 @@ pub enum VoxelFace {
 pub struct VoxelMesh {
     voxels: Vec<u32>,
     indices: Vec<u32>,
+    positions: Vec<Vec3>,
 }
 
 impl VoxelMesh {
@@ -58,6 +60,9 @@ impl VoxelMesh {
         color: u32,
         ao: u32,
     ) -> u32 {
+        self.positions
+            .push(Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32));
+
         let x = (pos.x & 0x0F) << 28;
         let y = (pos.y & 0x0F) << 24;
         let z = (pos.z & 0x0F) << 20;
@@ -121,10 +126,22 @@ impl VoxelMesh {
         self.indices.extend(indices);
     }
 
-    pub fn build(self) -> Mesh {
+    pub fn build(self) -> (Mesh, Option<Collider>) {
         let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
         mesh.insert_attribute(Self::VOXEL, self.voxels);
-        mesh.insert_indices(Indices::U32(self.indices));
-        mesh
+        mesh.insert_indices(Indices::U32(self.indices.clone()));
+
+        let collider = if self.positions.is_empty() {
+            None
+        } else {
+            let mut collider_mesh =
+                Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::all());
+            collider_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, self.positions);
+            collider_mesh.insert_indices(Indices::U32(self.indices));
+
+            Some(Collider::trimesh_from_mesh(&collider_mesh).unwrap())
+        };
+
+        (mesh, collider)
     }
 }
