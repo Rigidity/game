@@ -143,10 +143,6 @@ impl LocalPos {
             chunk_pos.z * CHUNK_SIZE + self.z,
         )
     }
-
-    pub fn center(self, chunk_pos: ChunkPos) -> Vec3 {
-        self.block_pos(chunk_pos).center()
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
