@@ -15,22 +15,21 @@ use super::{Player, PlayerCamera};
 
 const MAX_REACH: f32 = 5.0;
 
-pub fn handle_block_interaction(
-    mouse: Res<ButtonInput<MouseButton>>,
+#[derive(Debug, Default, Clone, Copy, Resource)]
+pub struct FocusedBlock {
+    pub block_pos: Option<BlockPos>,
+    pub air_pos: Option<BlockPos>,
+}
+
+pub fn update_focused_block(
+    world: Res<WorldMap>,
+    mut focused_block: ResMut<FocusedBlock>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
     camera_query: Query<(&Transform, &Parent), With<PlayerCamera>>,
     player_query: Query<&Transform, With<Player>>,
-    mut world: ResMut<WorldMap>,
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    materials: Res<VoxelMaterials>,
 ) {
-    // Only handle input when mouse is clicked
-    if !mouse.just_pressed(MouseButton::Left) && !mouse.just_pressed(MouseButton::Right) {
-        return;
-    }
-
     let window = primary_window.single();
+
     if window.cursor_options.grab_mode == CursorGrabMode::None {
         return;
     }
@@ -41,66 +40,107 @@ pub fn handle_block_interaction(
     let ray_origin = player_transform.translation + camera_transform.translation;
     let ray_direction = camera_transform.forward().normalize();
 
-    // Check for block intersections
-    if let Some((hit_pos, hit_normal)) =
-        raycast_blocks(&world, ray_origin, ray_direction, MAX_REACH)
-    {
-        let world_pos = if mouse.just_pressed(MouseButton::Right) {
-            hit_pos + hit_normal
-        } else {
-            hit_pos
-        };
+    let Some((hit_pos, hit_normal)) = raycast_blocks(&world, ray_origin, ray_direction, MAX_REACH)
+    else {
+        focused_block.block_pos = None;
+        focused_block.air_pos = None;
+        return;
+    };
 
-        let block_pos = BlockPos::from_world(world_pos);
-        let chunk_pos = block_pos.chunk_pos();
-        let local_pos = block_pos.local_pos();
+    let block_pos = BlockPos::from_world(hit_pos);
+    let air_pos = BlockPos::from_world(hit_pos + hit_normal);
 
-        // Modify the block
-        if let Some(chunk) = world.chunk_mut(chunk_pos) {
-            if mouse.just_pressed(MouseButton::Left) {
-                chunk.set(local_pos, Block::Air);
-            } else {
-                chunk.set(local_pos, Block::Rock);
-            }
+    if world.block(block_pos).is_solid() {
+        focused_block.block_pos = Some(block_pos);
+    } else {
+        focused_block.block_pos = None;
+    }
 
-            // Regenerate mesh for the modified chunk
-            regenerate_chunk_mesh(
-                &mut commands,
-                &mut world,
-                chunk_pos,
-                &mut meshes,
-                &materials,
-            );
+    if world.block(air_pos).is_air() {
+        focused_block.air_pos = Some(air_pos);
+    } else {
+        focused_block.air_pos = None;
+    }
+}
 
-            // Regenerate neighboring chunks if the modified block was on the edge
-            let neighbors = [
-                ChunkPos::X,
-                ChunkPos::NEG_X,
-                ChunkPos::Y,
-                ChunkPos::NEG_Y,
-                ChunkPos::Z,
-                ChunkPos::NEG_Z,
-            ];
+pub fn break_or_place_block(
+    mouse: Res<ButtonInput<MouseButton>>,
+    focused_block: Res<FocusedBlock>,
+    primary_window: Query<&Window, With<PrimaryWindow>>,
+    mut world: ResMut<WorldMap>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    materials: Res<VoxelMaterials>,
+) {
+    let window = primary_window.single();
+    if window.cursor_options.grab_mode == CursorGrabMode::None {
+        return;
+    }
 
-            for &offset in &neighbors {
-                if local_pos.x() == 0
-                    || local_pos.x() == CHUNK_SIZE as usize - 1
-                    || local_pos.y() == 0
-                    || local_pos.y() == CHUNK_SIZE as usize - 1
-                    || local_pos.z() == 0
-                    || local_pos.z() == CHUNK_SIZE as usize - 1
-                {
-                    let neighbor_pos = chunk_pos + offset;
-                    if world.chunk(neighbor_pos).is_some() {
-                        regenerate_chunk_mesh(
-                            &mut commands,
-                            &mut world,
-                            neighbor_pos,
-                            &mut meshes,
-                            &materials,
-                        );
-                    }
-                }
+    let is_breaking = mouse.just_pressed(MouseButton::Left);
+    let is_placing = mouse.just_pressed(MouseButton::Right);
+
+    if !is_breaking && !is_placing {
+        return;
+    }
+
+    let block_pos = if is_breaking {
+        focused_block.block_pos
+    } else {
+        focused_block.air_pos
+    };
+
+    let Some(block_pos) = block_pos else {
+        return;
+    };
+
+    let chunk_pos = block_pos.chunk_pos();
+    let local_pos = block_pos.local_pos();
+
+    let Some(chunk) = world.chunk_mut(chunk_pos) else {
+        return;
+    };
+
+    if is_breaking {
+        chunk.set(local_pos, Block::Air);
+    } else {
+        chunk.set(local_pos, Block::Rock);
+    }
+
+    regenerate_chunk_mesh(
+        &mut commands,
+        &mut world,
+        chunk_pos,
+        &mut meshes,
+        &materials,
+    );
+
+    let neighbors = [
+        ChunkPos::X,
+        ChunkPos::NEG_X,
+        ChunkPos::Y,
+        ChunkPos::NEG_Y,
+        ChunkPos::Z,
+        ChunkPos::NEG_Z,
+    ];
+
+    for &offset in &neighbors {
+        if local_pos.x() == 0
+            || local_pos.x() == CHUNK_SIZE as usize - 1
+            || local_pos.y() == 0
+            || local_pos.y() == CHUNK_SIZE as usize - 1
+            || local_pos.z() == 0
+            || local_pos.z() == CHUNK_SIZE as usize - 1
+        {
+            let neighbor_pos = chunk_pos + offset;
+            if world.chunk(neighbor_pos).is_some() {
+                regenerate_chunk_mesh(
+                    &mut commands,
+                    &mut world,
+                    neighbor_pos,
+                    &mut meshes,
+                    &materials,
+                );
             }
         }
     }
