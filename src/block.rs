@@ -1,8 +1,6 @@
-use bevy::prelude::*;
-use bevy::utils::HashMap;
-
-use crate::chunk::Chunk;
+use crate::position::BlockPos;
 use crate::voxel_mesh::{VoxelFace, VoxelMesh};
+use crate::world::WorldMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlockFaces {
@@ -47,11 +45,9 @@ impl Block {
     pub fn render(
         &self,
         mesh: &mut VoxelMesh,
+        world: &WorldMap,
+        block_pos: BlockPos,
         faces: BlockFaces,
-        position: UVec3,
-        chunk: &Chunk,
-        chunks: &HashMap<IVec3, Chunk>,
-        chunk_pos: IVec3,
     ) {
         match self {
             Self::Air => {}
@@ -65,8 +61,8 @@ impl Block {
                     VoxelFace::Bottom,
                 ] {
                     if faces.get(face) {
-                        let ao = chunk.get_ao(chunks, chunk_pos, position, face);
-                        mesh.add_face(position, face, 0, ao);
+                        let ao = world.ambient_occlusion(block_pos, face);
+                        mesh.add_face(block_pos.local_pos(), face, 0, ao);
                     }
                 }
             }

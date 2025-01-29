@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{aabb::Aabb, game_state::GameState, player::Player, WorldMap};
+use crate::{aabb::Aabb, game_state::GameState, player::Player, position::BlockPos, WorldMap};
 
 #[derive(Debug, Clone, Copy)]
 pub struct PhysicsPlugin;
@@ -41,9 +41,9 @@ fn apply_physics(
     for x in min_block.x..=max_block.x {
         for y in min_block.y..=max_block.y {
             for z in min_block.z..=max_block.z {
-                let block_pos = Vec3::new(x as f32, y as f32, z as f32);
-                if is_position_solid(&world, block_pos) {
-                    let block_aabb = Aabb::new(block_pos + Vec3::splat(0.5), Vec3::ONE);
+                let block_pos = BlockPos::new(x, y, z);
+                if world.block(block_pos).is_solid() {
+                    let block_aabb = Aabb::new(block_pos.center(), Vec3::ONE);
                     if player_aabb.intersects(&block_aabb) {
                         collisions.push(block_aabb);
                     }
@@ -119,44 +119,5 @@ fn apply_physics(
         const GROUND_DRAG: f32 = 0.97;
         velocity.0.x *= GROUND_DRAG;
         velocity.0.z *= GROUND_DRAG;
-    }
-}
-
-// Helper function to check if a world position is inside a solid block
-pub fn is_position_solid(world: &WorldMap, pos: Vec3) -> bool {
-    // Convert world position to block position (using floor for negative numbers)
-    let block_x = pos.x.floor();
-    let block_y = pos.y.floor();
-    let block_z = pos.z.floor();
-
-    // Calculate chunk position
-    let chunk_x = if block_x < 0.0 {
-        ((block_x + 1.0) / 16.0).floor() as i32 - 1
-    } else {
-        (block_x / 16.0).floor() as i32
-    };
-    let chunk_y = if block_y < 0.0 {
-        ((block_y + 1.0) / 16.0).floor() as i32 - 1
-    } else {
-        (block_y / 16.0).floor() as i32
-    };
-    let chunk_z = if block_z < 0.0 {
-        ((block_z + 1.0) / 16.0).floor() as i32 - 1
-    } else {
-        (block_z / 16.0).floor() as i32
-    };
-
-    let chunk_pos = IVec3::new(chunk_x, chunk_y, chunk_z);
-
-    if let Some(chunk) = world.chunks.get(&chunk_pos) {
-        // Calculate local position within chunk
-        let local_x = ((block_x.rem_euclid(16.0)) as i32).rem_euclid(16) as u32;
-        let local_y = ((block_y.rem_euclid(16.0)) as i32).rem_euclid(16) as u32;
-        let local_z = ((block_z.rem_euclid(16.0)) as i32).rem_euclid(16) as u32;
-        let local_pos = UVec3::new(local_x, local_y, local_z);
-
-        chunk.get(local_pos).is_solid()
-    } else {
-        false // Changed to false to allow falling in void
     }
 }

@@ -7,6 +7,8 @@ use bevy::{
     },
 };
 
+use crate::position::LocalPos;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum VoxelCorner {
     TopLeft,
@@ -53,18 +55,18 @@ impl VoxelMesh {
 
     pub fn add_vertex(
         &mut self,
-        pos: UVec3,
+        pos: LocalPos,
         corner: VoxelCorner,
         face: VoxelFace,
         tex_index: u32,
         ao: u32,
     ) -> u32 {
         self.positions
-            .push(Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32));
+            .push(Vec3::new(pos.x() as f32, pos.y() as f32, pos.z() as f32));
 
-        let x = (pos.x & 0x0F) << 28;
-        let y = (pos.y & 0x0F) << 24;
-        let z = (pos.z & 0x0F) << 20;
+        let x = (pos.x() as u32 & 0x0F) << 28;
+        let y = (pos.y() as u32 & 0x0F) << 24;
+        let z = (pos.z() as u32 & 0x0F) << 20;
         let corner = (corner.to_index()) << 18;
         let face = (face as u32) << 15;
         let ao = (ao & 0x3) << 13; // Pack AO into bits 13-14
@@ -74,7 +76,7 @@ impl VoxelMesh {
         self.voxels.len() as u32 - 1
     }
 
-    pub fn add_face(&mut self, pos: UVec3, face: VoxelFace, tex_index: u32, ao: [u32; 4]) {
+    pub fn add_face(&mut self, pos: LocalPos, face: VoxelFace, tex_index: u32, ao: [u32; 4]) {
         match face {
             VoxelFace::Top => {
                 let a = self.add_vertex(pos, VoxelCorner::BottomLeft, face, tex_index, ao[0]);

@@ -4,15 +4,15 @@ mod chunk;
 mod game_state;
 mod physics;
 mod player;
+mod position;
 mod texture_array;
 mod voxel_material;
 mod voxel_mesh;
 mod world;
 
-use bevy::{prelude::*, utils::HashMap};
+use bevy::prelude::*;
 use bevy_asset_loader::prelude::*;
 use game_state::GameState;
-use noise::Perlin;
 use physics::PhysicsPlugin;
 use player::PlayerPlugin;
 use voxel_material::VoxelMaterial;
@@ -38,10 +38,7 @@ fn main() {
             WorldPlugin,
             PhysicsPlugin,
         ))
-        .insert_resource(WorldMap {
-            chunks: HashMap::new(),
-            noise: Perlin::new(42),
-        })
+        .insert_resource(WorldMap::new(42))
         .init_state::<GameState>()
         .add_loading_state(
             LoadingState::new(GameState::Loading)

@@ -8,7 +8,8 @@ use crate::{
     aabb::Aabb,
     block::Block,
     game_state::GameState,
-    physics::{is_position_solid, Velocity},
+    physics::Velocity,
+    position::{BlockPos, ChunkPos, CHUNK_SIZE},
     world::regenerate_chunk_mesh,
     VoxelMaterials, WorldMap,
 };
@@ -125,6 +126,9 @@ fn player_move(
     mut query: Query<(&mut Velocity, &Player)>,
     camera: Query<&Transform, (With<PlayerCamera>, Without<Player>)>,
 ) {
+    const MOVEMENT_SPEED: f32 = 8.0;
+    const JUMP_FORCE: f32 = 9.0;
+
     if let Ok(window) = primary_window.get_single() {
         let (mut velocity, physics) = query.single_mut();
         let transform = camera.single();
@@ -149,31 +153,28 @@ fn player_move(
                 movement += right;
             }
 
-            // Normalize horizontal movement
-            movement = movement.normalize_or_zero();
-
-            const MOVEMENT_SPEED: f32 = 8.0;
-            const JUMP_FORCE: f32 = 9.0;
-
-            // Apply movement
-            let target_velocity = movement * MOVEMENT_SPEED;
-
             // Jump when space is pressed and on ground
             if keys.pressed(KeyCode::Space) && physics.on_ground {
                 velocity.0.y = JUMP_FORCE;
             }
-
-            // Smoothly interpolate horizontal velocity
-            let acceleration = if physics.on_ground { 10.0 } else { 2.0 };
-            velocity.0.x = velocity
-                .0
-                .x
-                .lerp(target_velocity.x, acceleration * time.delta_secs());
-            velocity.0.z = velocity
-                .0
-                .z
-                .lerp(target_velocity.z, acceleration * time.delta_secs());
         }
+
+        // Normalize horizontal movement
+        movement = movement.normalize_or_zero();
+
+        // Apply movement
+        let target_velocity = movement * MOVEMENT_SPEED;
+
+        // Smoothly interpolate horizontal velocity
+        let acceleration = if physics.on_ground { 10.0 } else { 2.0 };
+        velocity.0.x = velocity
+            .0
+            .x
+            .lerp(target_velocity.x, acceleration * time.delta_secs());
+        velocity.0.z = velocity
+            .0
+            .z
+            .lerp(target_velocity.z, acceleration * time.delta_secs());
     }
 }
 
@@ -209,27 +210,18 @@ fn handle_block_interaction(
     if let Some((hit_pos, hit_normal)) =
         raycast_blocks(&world, ray_origin, ray_direction, MAX_REACH)
     {
-        let place_pos = if mouse.just_pressed(MouseButton::Right) {
+        let world_pos = if mouse.just_pressed(MouseButton::Right) {
             hit_pos + hit_normal
         } else {
             hit_pos
         };
 
-        // Convert world position to chunk and local coordinates
-        let chunk_pos = IVec3::new(
-            (place_pos.x / 16.0).floor() as i32,
-            (place_pos.y / 16.0).floor() as i32,
-            (place_pos.z / 16.0).floor() as i32,
-        );
-
-        let local_pos = UVec3::new(
-            place_pos.x.rem_euclid(16.0) as u32,
-            place_pos.y.rem_euclid(16.0) as u32,
-            place_pos.z.rem_euclid(16.0) as u32,
-        );
+        let block_pos = BlockPos::from_world(world_pos);
+        let chunk_pos = block_pos.chunk_pos();
+        let local_pos = block_pos.local_pos();
 
         // Modify the block
-        if let Some(chunk) = world.chunks.get_mut(&chunk_pos) {
+        if let Some(chunk) = world.chunk_mut(chunk_pos) {
             if mouse.just_pressed(MouseButton::Left) {
                 chunk.set(local_pos, Block::Air);
             } else {
@@ -239,7 +231,7 @@ fn handle_block_interaction(
             // Regenerate mesh for the modified chunk
             regenerate_chunk_mesh(
                 &mut commands,
-                &mut world.chunks,
+                &mut world,
                 chunk_pos,
                 &mut meshes,
                 &materials,
@@ -247,27 +239,27 @@ fn handle_block_interaction(
 
             // Regenerate neighboring chunks if the modified block was on the edge
             let neighbors = [
-                IVec3::X,
-                IVec3::NEG_X,
-                IVec3::Y,
-                IVec3::NEG_Y,
-                IVec3::Z,
-                IVec3::NEG_Z,
+                ChunkPos::X,
+                ChunkPos::NEG_X,
+                ChunkPos::Y,
+                ChunkPos::NEG_Y,
+                ChunkPos::Z,
+                ChunkPos::NEG_Z,
             ];
 
             for &offset in &neighbors {
-                if local_pos.x == 0
-                    || local_pos.x == 15
-                    || local_pos.y == 0
-                    || local_pos.y == 15
-                    || local_pos.z == 0
-                    || local_pos.z == 15
+                if local_pos.x() == 0
+                    || local_pos.x() == CHUNK_SIZE as usize - 1
+                    || local_pos.y() == 0
+                    || local_pos.y() == CHUNK_SIZE as usize - 1
+                    || local_pos.z() == 0
+                    || local_pos.z() == CHUNK_SIZE as usize - 1
                 {
                     let neighbor_pos = chunk_pos + offset;
-                    if world.chunks.contains_key(&neighbor_pos) {
+                    if world.chunk(neighbor_pos).is_some() {
                         regenerate_chunk_mesh(
                             &mut commands,
-                            &mut world.chunks,
+                            &mut world,
                             neighbor_pos,
                             &mut meshes,
                             &materials,
@@ -291,7 +283,7 @@ fn raycast_blocks(
     for _ in 0..((max_distance / step) as i32) {
         let block_pos = current_pos.floor();
 
-        if is_position_solid(world, block_pos) {
+        if world.block(BlockPos::from_world(block_pos)).is_solid() {
             let block_center = block_pos + Vec3::splat(0.5);
             let block_aabb = Aabb::new(block_center, Vec3::ONE);
 
