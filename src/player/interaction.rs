@@ -21,6 +21,9 @@ pub struct FocusedBlock {
     pub air_pos: Option<BlockPos>,
 }
 
+#[derive(Debug, Default, Clone, Resource)]
+pub struct InteractionTimer(pub Timer);
+
 pub fn update_focused_block(
     world: Res<WorldMap>,
     mut focused_block: ResMut<FocusedBlock>,
@@ -64,25 +67,34 @@ pub fn update_focused_block(
 }
 
 pub fn break_or_place_block(
+    time: Res<Time>,
     mouse: Res<ButtonInput<MouseButton>>,
     focused_block: Res<FocusedBlock>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
     mut world: ResMut<WorldMap>,
+    mut timer: ResMut<InteractionTimer>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     materials: Res<VoxelMaterials>,
 ) {
+    timer.0.tick(time.delta());
+
     let window = primary_window.single();
     if window.cursor_options.grab_mode == CursorGrabMode::None {
         return;
     }
 
-    let is_breaking = mouse.just_pressed(MouseButton::Left);
-    let is_placing = mouse.just_pressed(MouseButton::Right);
+    let is_breaking = mouse.just_pressed(MouseButton::Left)
+        || (mouse.pressed(MouseButton::Left) && timer.0.just_finished());
+
+    let is_placing = mouse.just_pressed(MouseButton::Right)
+        || (mouse.pressed(MouseButton::Right) && timer.0.just_finished());
 
     if !is_breaking && !is_placing {
         return;
     }
+
+    timer.0.reset();
 
     let block_pos = if is_breaking {
         focused_block.block_pos
