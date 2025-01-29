@@ -62,7 +62,7 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 
     let uv = vec2<f32>(
         f32(corner & 1u),
-        f32(corner >> 1u)
+        1.0 - f32(corner >> 1u)
     );
 
     var out: VertexOutput;

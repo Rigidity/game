@@ -22,6 +22,12 @@ use world::{WorldMap, WorldPlugin};
 pub struct ImageAssets {
     #[asset(path = "Voxels/Rock.png")]
     pub rock: Handle<Image>,
+    #[asset(path = "Voxels/Dirt.png")]
+    pub dirt: Handle<Image>,
+    #[asset(path = "Voxels/GrassSide.png")]
+    pub grass_side: Handle<Image>,
+    #[asset(path = "Voxels/Grass.png")]
+    pub grass: Handle<Image>,
 }
 
 #[derive(Resource)]

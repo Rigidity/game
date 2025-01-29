@@ -31,6 +31,8 @@ pub enum Block {
     #[default]
     Air,
     Rock,
+    Dirt,
+    Grass,
 }
 
 impl Block {
@@ -49,22 +51,29 @@ impl Block {
         block_pos: BlockPos,
         faces: BlockFaces,
     ) {
-        match self {
-            Self::Air => {}
-            Self::Rock => {
-                for face in [
-                    VoxelFace::Left,
-                    VoxelFace::Right,
-                    VoxelFace::Front,
-                    VoxelFace::Back,
-                    VoxelFace::Top,
-                    VoxelFace::Bottom,
-                ] {
-                    if faces.get(face) {
-                        let ao = world.ambient_occlusion(block_pos, face);
-                        mesh.add_face(block_pos.local_pos(), face, 0, ao);
-                    }
-                }
+        for face in [
+            VoxelFace::Left,
+            VoxelFace::Right,
+            VoxelFace::Front,
+            VoxelFace::Back,
+            VoxelFace::Top,
+            VoxelFace::Bottom,
+        ] {
+            if faces.get(face) {
+                let ao = world.ambient_occlusion(block_pos, face);
+                mesh.add_face(
+                    block_pos.local_pos(),
+                    face,
+                    match (self, face) {
+                        (Self::Air, _) => continue,
+                        (Self::Rock, _) => 0,
+                        (Self::Dirt, _) => 1,
+                        (Self::Grass, VoxelFace::Top) => 3,
+                        (Self::Grass, VoxelFace::Bottom) => 1,
+                        (Self::Grass, _) => 2,
+                    },
+                    ao,
+                );
             }
         }
     }

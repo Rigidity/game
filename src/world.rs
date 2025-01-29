@@ -231,19 +231,23 @@ fn generate_chunks(mut world: ResMut<WorldMap>) {
                             let world_y = chunk_y * CHUNK_SIZE + y;
                             let world_z = chunk_z * CHUNK_SIZE + z;
 
-                            let noise_value = world.noise.get([
-                                world_x as f64 * 0.04,
-                                world_y as f64 * 0.04,
-                                world_z as f64 * 0.04,
-                            ]);
+                            let height = world
+                                .noise
+                                .get([world_x as f64 * 0.02, world_z as f64 * 0.02]);
+                            let surface_height = height * 18.0 + 60.0;
 
-                            let normalized_noise = (noise_value + 1.0) / 2.0;
-                            let height_threshold = (world_y as f64 / (4.0 * 16.0)) * 0.8;
+                            if (world_y as f64) < surface_height {
+                                let block_type = if (surface_height - (world_y as f64)) <= 1.0 {
+                                    Block::Grass
+                                } else if (surface_height - (world_y as f64)) <= 3.0 {
+                                    Block::Dirt
+                                } else {
+                                    Block::Rock
+                                };
 
-                            if normalized_noise > height_threshold {
                                 chunk.set(
                                     LocalPos::new(x as usize, y as usize, z as usize).unwrap(),
-                                    Block::Rock,
+                                    block_type,
                                 );
                             }
                         }
@@ -264,7 +268,16 @@ fn build_chunk_meshes(
     mut materials: ResMut<Assets<VoxelMaterial>>,
     mut world: ResMut<WorldMap>,
 ) {
-    let array_texture = create_texture_array(vec![image_assets.rock.clone()], &mut images).unwrap();
+    let array_texture = create_texture_array(
+        vec![
+            image_assets.rock.clone(),
+            image_assets.dirt.clone(),
+            image_assets.grass_side.clone(),
+            image_assets.grass.clone(),
+        ],
+        &mut images,
+    )
+    .unwrap();
     let material = materials.add(VoxelMaterial { array_texture });
 
     commands.insert_resource(VoxelMaterials {
