@@ -24,7 +24,7 @@ pub fn toggle_grab(
 
     let mut window = primary_window.single_mut();
 
-    let should_grab = window.cursor_options.grab_mode != CursorGrabMode::None;
+    let should_grab = window.cursor_options.grab_mode == CursorGrabMode::None;
     set_grab(&mut window, should_grab);
 }
 
