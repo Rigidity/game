@@ -56,7 +56,7 @@ fn apply_physics(
     physics.on_ground = false;
 
     // Resolve collisions
-    for block in collisions.iter() {
+    for block in &collisions {
         let overlap = Vec3::new(
             if (new_pos.x - block.min.x).abs() < (block.max.x - new_pos.x).abs() {
                 block.min.x - (new_pos.x + PLAYER_SIZE.x * 0.5)

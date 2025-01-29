@@ -3,6 +3,7 @@ use crate::voxel_mesh::{VoxelFace, VoxelMesh};
 use crate::world::WorldMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct BlockFaces {
     pub left: bool,
     pub right: bool,
@@ -13,7 +14,7 @@ pub struct BlockFaces {
 }
 
 impl BlockFaces {
-    pub fn get(&self, face: VoxelFace) -> bool {
+    pub fn get(self, face: VoxelFace) -> bool {
         match face {
             VoxelFace::Left => self.left,
             VoxelFace::Right => self.right,
@@ -36,16 +37,16 @@ pub enum Block {
 }
 
 impl Block {
-    pub fn is_air(&self) -> bool {
+    pub fn is_air(self) -> bool {
         matches!(self, Block::Air)
     }
 
-    pub fn is_solid(&self) -> bool {
+    pub fn is_solid(self) -> bool {
         !self.is_air()
     }
 
     pub fn render(
-        &self,
+        self,
         mesh: &mut VoxelMesh,
         world: &WorldMap,
         block_pos: BlockPos,
@@ -64,6 +65,7 @@ impl Block {
                 mesh.add_face(
                     block_pos.local_pos(),
                     face,
+                    #[allow(clippy::match_same_arms)]
                     match (self, face) {
                         (Self::Air, _) => continue,
                         (Self::Rock, _) => 0,

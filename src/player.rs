@@ -127,7 +127,7 @@ fn player_move(
     camera: Query<&Transform, (With<PlayerCamera>, Without<Player>)>,
 ) {
     const MOVEMENT_SPEED: f32 = 8.0;
-    const JUMP_FORCE: f32 = 9.0;
+    const JUMP_FORCE: f32 = 8.0;
 
     if let Ok(window) = primary_window.get_single() {
         let (mut velocity, physics) = query.single_mut();

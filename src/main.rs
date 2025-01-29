@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 mod aabb;
 mod block;
 mod chunk;
@@ -18,7 +20,7 @@ use player::PlayerPlugin;
 use voxel_material::VoxelMaterial;
 use world::{WorldMap, WorldPlugin};
 
-#[derive(AssetCollection, Resource)]
+#[derive(Debug, Clone, AssetCollection, Resource)]
 pub struct ImageAssets {
     #[asset(path = "Voxels/Rock.png")]
     pub rock: Handle<Image>,
