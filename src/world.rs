@@ -3,7 +3,7 @@ use noise::{NoiseFn, Perlin};
 
 use crate::{
     block::Block, chunk::Chunk, game_state::GameState, texture_array::create_texture_array,
-    voxel_material::VoxelMaterial, ChunkManager, ImageAssets, VoxelMaterials,
+    voxel_material::VoxelMaterial, ImageAssets, VoxelMaterials,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -18,9 +18,13 @@ impl Plugin for WorldPlugin {
     }
 }
 
-fn generate_chunks(mut chunk_manager: ResMut<ChunkManager>) {
-    let perlin = Perlin::new(42);
+#[derive(Resource)]
+pub struct WorldMap {
+    pub chunks: HashMap<IVec3, Chunk>,
+    pub noise: Perlin,
+}
 
+fn generate_chunks(mut world: ResMut<WorldMap>) {
     // Generate a grid of chunks
     for chunk_x in 0..16 {
         for chunk_y in 0..16 {
@@ -36,7 +40,7 @@ fn generate_chunks(mut chunk_manager: ResMut<ChunkManager>) {
                             let world_y = chunk_y * 16 + y as i32;
                             let world_z = chunk_z * 16 + z as i32;
 
-                            let noise_value = perlin.get([
+                            let noise_value = world.noise.get([
                                 world_x as f64 * 0.04,
                                 world_y as f64 * 0.04,
                                 world_z as f64 * 0.04,
@@ -52,7 +56,7 @@ fn generate_chunks(mut chunk_manager: ResMut<ChunkManager>) {
                     }
                 }
 
-                chunk_manager.chunks.insert(chunk_pos, chunk);
+                world.chunks.insert(chunk_pos, chunk);
             }
         }
     }
@@ -64,7 +68,7 @@ fn build_chunk_meshes(
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<VoxelMaterial>>,
-    mut chunk_manager: ResMut<ChunkManager>,
+    mut world: ResMut<WorldMap>,
 ) {
     let array_texture = create_texture_array(vec![image_assets.rock.clone()], &mut images).unwrap();
     let material = materials.add(VoxelMaterial { array_texture });
@@ -74,9 +78,9 @@ fn build_chunk_meshes(
     });
 
     // Clone the chunks map to avoid borrow conflict
-    let chunks = chunk_manager.chunks.clone();
+    let chunks = world.chunks.clone();
 
-    for (&chunk_pos, chunk) in chunk_manager.chunks.iter_mut() {
+    for (&chunk_pos, chunk) in world.chunks.iter_mut() {
         let mesh = chunk.render(&chunks, chunk_pos).build();
 
         let entity = commands

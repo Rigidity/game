@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{aabb::Aabb, game_state::GameState, player::Player, ChunkManager};
+use crate::{aabb::Aabb, game_state::GameState, player::Player, WorldMap};
 
 #[derive(Debug, Clone, Copy)]
 pub struct PhysicsPlugin;
@@ -16,7 +16,7 @@ pub struct Velocity(pub Vec3);
 
 fn apply_physics(
     time: Res<Time>,
-    chunk_manager: Res<ChunkManager>,
+    world: Res<WorldMap>,
     mut query: Query<(&mut Transform, &mut Velocity, &mut Player)>,
 ) {
     let (mut transform, mut velocity, mut physics) = query.single_mut();
@@ -42,7 +42,7 @@ fn apply_physics(
         for y in min_block.y..=max_block.y {
             for z in min_block.z..=max_block.z {
                 let block_pos = Vec3::new(x as f32, y as f32, z as f32);
-                if is_position_solid(&chunk_manager, block_pos) {
+                if is_position_solid(&world, block_pos) {
                     let block_aabb = Aabb::new(block_pos + Vec3::splat(0.5), Vec3::ONE);
                     if player_aabb.intersects(&block_aabb) {
                         collisions.push(block_aabb);
@@ -123,7 +123,7 @@ fn apply_physics(
 }
 
 // Helper function to check if a world position is inside a solid block
-pub fn is_position_solid(chunk_manager: &ChunkManager, pos: Vec3) -> bool {
+pub fn is_position_solid(world: &WorldMap, pos: Vec3) -> bool {
     // Convert world position to block position (using floor for negative numbers)
     let block_x = pos.x.floor();
     let block_y = pos.y.floor();
@@ -148,7 +148,7 @@ pub fn is_position_solid(chunk_manager: &ChunkManager, pos: Vec3) -> bool {
 
     let chunk_pos = IVec3::new(chunk_x, chunk_y, chunk_z);
 
-    if let Some(chunk) = chunk_manager.chunks.get(&chunk_pos) {
+    if let Some(chunk) = world.chunks.get(&chunk_pos) {
         // Calculate local position within chunk
         let local_x = ((block_x.rem_euclid(16.0)) as i32).rem_euclid(16) as u32;
         let local_y = ((block_y.rem_euclid(16.0)) as i32).rem_euclid(16) as u32;

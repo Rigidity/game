@@ -11,17 +11,12 @@ mod world;
 
 use bevy::{prelude::*, utils::HashMap};
 use bevy_asset_loader::prelude::*;
-use chunk::Chunk;
 use game_state::GameState;
+use noise::Perlin;
 use physics::PhysicsPlugin;
 use player::PlayerPlugin;
 use voxel_material::VoxelMaterial;
-use world::WorldPlugin;
-
-#[derive(Resource)]
-struct ChunkManager {
-    chunks: HashMap<IVec3, Chunk>,
-}
+use world::{WorldMap, WorldPlugin};
 
 #[derive(AssetCollection, Resource)]
 pub struct ImageAssets {
@@ -43,8 +38,9 @@ fn main() {
             WorldPlugin,
             PhysicsPlugin,
         ))
-        .insert_resource(ChunkManager {
+        .insert_resource(WorldMap {
             chunks: HashMap::new(),
+            noise: Perlin::new(42),
         })
         .init_state::<GameState>()
         .add_loading_state(

@@ -10,7 +10,7 @@ use crate::{
     game_state::GameState,
     physics::{is_position_solid, Velocity},
     world::regenerate_chunk_mesh,
-    ChunkManager, VoxelMaterials,
+    VoxelMaterials, WorldMap,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -184,7 +184,7 @@ fn handle_block_interaction(
     primary_window: Query<&Window, With<PrimaryWindow>>,
     camera_query: Query<(&Transform, &Parent), With<PlayerCamera>>,
     player_query: Query<&Transform, With<Player>>,
-    mut chunk_manager: ResMut<ChunkManager>,
+    mut world: ResMut<WorldMap>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     materials: Res<VoxelMaterials>,
@@ -207,7 +207,7 @@ fn handle_block_interaction(
 
     // Check for block intersections
     if let Some((hit_pos, hit_normal)) =
-        raycast_blocks(&chunk_manager, ray_origin, ray_direction, MAX_REACH)
+        raycast_blocks(&world, ray_origin, ray_direction, MAX_REACH)
     {
         let place_pos = if mouse.just_pressed(MouseButton::Right) {
             hit_pos + hit_normal
@@ -229,7 +229,7 @@ fn handle_block_interaction(
         );
 
         // Modify the block
-        if let Some(chunk) = chunk_manager.chunks.get_mut(&chunk_pos) {
+        if let Some(chunk) = world.chunks.get_mut(&chunk_pos) {
             if mouse.just_pressed(MouseButton::Left) {
                 chunk.set(local_pos, Block::Air);
             } else {
@@ -239,7 +239,7 @@ fn handle_block_interaction(
             // Regenerate mesh for the modified chunk
             regenerate_chunk_mesh(
                 &mut commands,
-                &mut chunk_manager.chunks,
+                &mut world.chunks,
                 chunk_pos,
                 &mut meshes,
                 &materials,
@@ -264,10 +264,10 @@ fn handle_block_interaction(
                     || local_pos.z == 15
                 {
                     let neighbor_pos = chunk_pos + offset;
-                    if chunk_manager.chunks.contains_key(&neighbor_pos) {
+                    if world.chunks.contains_key(&neighbor_pos) {
                         regenerate_chunk_mesh(
                             &mut commands,
-                            &mut chunk_manager.chunks,
+                            &mut world.chunks,
                             neighbor_pos,
                             &mut meshes,
                             &materials,
@@ -280,7 +280,7 @@ fn handle_block_interaction(
 }
 
 fn raycast_blocks(
-    chunk_manager: &ChunkManager,
+    world: &WorldMap,
     ray_origin: Vec3,
     ray_direction: Vec3,
     max_distance: f32,
@@ -291,7 +291,7 @@ fn raycast_blocks(
     for _ in 0..((max_distance / step) as i32) {
         let block_pos = current_pos.floor();
 
-        if is_position_solid(chunk_manager, block_pos) {
+        if is_position_solid(world, block_pos) {
             let block_center = block_pos + Vec3::splat(0.5);
             let block_aabb = Aabb::new(block_center, Vec3::ONE);
 
