@@ -71,19 +71,35 @@ impl Level {
                     let local_pos = LocalPos::new(x, y, z);
                     let pos = local_pos.block_pos(chunk_pos).world_pos();
 
-                    let height = self.noise.get([pos.x as f64 * 0.02, pos.z as f64 * 0.02]);
-                    let surface_height = height * 18.0 + 60.0;
+                    let density = self.noise.get([
+                        pos.x as f64 * 0.02,
+                        pos.y as f64 * 0.02,
+                        pos.z as f64 * 0.02,
+                    ]);
 
-                    if (pos.y as f64) < surface_height {
-                        let block_type = if (surface_height - (pos.y as f64)) <= 1.0 {
+                    if density > 0.0 {
+                        // Check upwards until we find air to determine if we're near a surface
+                        let distance_to_surface = (0..=5)
+                            .find(|&d| {
+                                let check_pos =
+                                    (local_pos.block_pos(chunk_pos) + BlockPos::Y * d).world_pos();
+                                self.noise.get([
+                                    check_pos.x as f64 * 0.02,
+                                    check_pos.y as f64 * 0.02,
+                                    check_pos.z as f64 * 0.02,
+                                ]) <= 0.0
+                            })
+                            .unwrap_or(5);
+
+                        let block_type = if distance_to_surface == 1 {
                             Block::Grass
-                        } else if (surface_height - (pos.y as f64)) <= 3.0 {
+                        } else if distance_to_surface <= 3 {
                             Block::Dirt
                         } else {
                             Block::Rock
                         };
 
-                        chunk.set(LocalPos::new(x, y, z), block_type);
+                        chunk.set(local_pos, block_type);
                     }
                 }
             }
