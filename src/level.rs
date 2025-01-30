@@ -66,7 +66,7 @@ impl LevelGenerator {
             pos.z as f64 * 0.005,
         ]);
 
-        large_scale * 0.6
+        large_scale * 0.5
     }
 
     fn get_terrain_density(&self, pos: &Vec3) -> f64 {
