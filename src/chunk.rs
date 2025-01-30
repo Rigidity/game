@@ -1,8 +1,8 @@
 use crate::{
     block::Block,
+    level::Level,
     position::{ChunkPos, LocalPos, CHUNK_INDICES},
     voxel_mesh::VoxelMesh,
-    world::WorldMap,
 };
 
 #[derive(Debug, Clone)]
@@ -31,7 +31,7 @@ impl Chunk {
         self.blocks[pos.index()] = block;
     }
 
-    pub fn render(&self, world: &WorldMap, chunk_pos: ChunkPos) -> VoxelMesh {
+    pub fn render(&self, level: &Level, chunk_pos: ChunkPos) -> VoxelMesh {
         let mut mesh = VoxelMesh::new();
 
         for (index, block) in self.blocks.iter().enumerate() {
@@ -40,8 +40,8 @@ impl Chunk {
             }
 
             let block_pos = LocalPos::from_index(index).block_pos(chunk_pos);
-            let faces = world.visible_faces(block_pos);
-            block.render(&mut mesh, world, block_pos, faces);
+            let faces = level.visible_faces(block_pos);
+            block.render(&mut mesh, level, block_pos, faces);
         }
 
         mesh

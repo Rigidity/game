@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{aabb::Aabb, game_state::GameState, player::Player, position::BlockPos, WorldMap};
+use crate::{aabb::Aabb, game_state::GameState, player::Player, position::BlockPos, Level};
 
 #[derive(Debug, Clone, Copy)]
 pub struct PhysicsPlugin;
@@ -16,7 +16,7 @@ pub struct Velocity(pub Vec3);
 
 fn apply_physics(
     time: Res<Time>,
-    world: Res<WorldMap>,
+    level: Res<Level>,
     mut query: Query<(&mut Transform, &mut Velocity, &mut Player)>,
 ) {
     let (mut transform, mut velocity, mut physics) = query.single_mut();
@@ -42,7 +42,7 @@ fn apply_physics(
         for y in min_block.y..=max_block.y {
             for z in min_block.z..=max_block.z {
                 let block_pos = BlockPos::new(x, y, z);
-                if world.block(block_pos).is_solid() {
+                if level.block(block_pos).is_solid() {
                     let block_aabb = Aabb::new(block_pos.center(), Vec3::ONE);
                     if player_aabb.intersects(&block_aabb) {
                         collisions.push(block_aabb);

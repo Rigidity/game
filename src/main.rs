@@ -4,21 +4,21 @@ mod aabb;
 mod block;
 mod chunk;
 mod game_state;
+mod level;
 mod physics;
 mod player;
 mod position;
 mod texture_array;
 mod voxel_material;
 mod voxel_mesh;
-mod world;
 
 use bevy::prelude::*;
 use bevy_asset_loader::prelude::*;
 use game_state::GameState;
+use level::{Level, LevelPlugin};
 use physics::PhysicsPlugin;
 use player::PlayerPlugin;
 use voxel_material::VoxelMaterial;
-use world::{WorldMap, WorldPlugin};
 
 #[derive(Debug, Clone, AssetCollection, Resource)]
 pub struct ImageAssets {
@@ -43,10 +43,10 @@ fn main() {
             DefaultPlugins.set(ImagePlugin::default_nearest()),
             MaterialPlugin::<VoxelMaterial>::default(),
             PlayerPlugin,
-            WorldPlugin,
+            LevelPlugin,
             PhysicsPlugin,
         ))
-        .insert_resource(WorldMap::new(42))
+        .insert_resource(Level::new(42))
         .init_state::<GameState>()
         .add_loading_state(
             LoadingState::new(GameState::Loading)

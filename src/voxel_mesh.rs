@@ -8,8 +8,8 @@ use bevy::{
 };
 
 use crate::{
+    level::Level,
     position::{BlockPos, LocalPos},
-    world::WorldMap,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -81,13 +81,13 @@ impl VoxelMesh {
 
     pub fn render_face(
         &mut self,
-        world: &WorldMap,
+        level: &Level,
         block_pos: BlockPos,
         face: VoxelFace,
         tex_index: u32,
     ) {
         let pos = block_pos.local_pos();
-        let ao = self.ambient_occlusion(world, block_pos, face);
+        let ao = self.ambient_occlusion(level, block_pos, face);
 
         match face {
             VoxelFace::Top => {
@@ -146,27 +146,22 @@ impl VoxelMesh {
         mesh
     }
 
-    fn ambient_occlusion(
-        &self,
-        world: &WorldMap,
-        block_pos: BlockPos,
-        face: VoxelFace,
-    ) -> [u32; 4] {
+    fn ambient_occlusion(&self, level: &Level, block_pos: BlockPos, face: VoxelFace) -> [u32; 4] {
         match face {
             VoxelFace::Top => {
                 let top = block_pos.top();
 
                 let [s1, s2, s3, s4] = [
-                    world.block(top.back()).is_solid(),
-                    world.block(top.right()).is_solid(),
-                    world.block(top.front()).is_solid(),
-                    world.block(top.left()).is_solid(),
+                    level.block(top.back()).is_solid(),
+                    level.block(top.right()).is_solid(),
+                    level.block(top.front()).is_solid(),
+                    level.block(top.left()).is_solid(),
                 ];
                 let [c1, c2, c3, c4] = [
-                    world.block(top.back().left()).is_solid(),
-                    world.block(top.back().right()).is_solid(),
-                    world.block(top.front().right()).is_solid(),
-                    world.block(top.front().left()).is_solid(),
+                    level.block(top.back().left()).is_solid(),
+                    level.block(top.back().right()).is_solid(),
+                    level.block(top.front().right()).is_solid(),
+                    level.block(top.front().left()).is_solid(),
                 ];
                 [
                     calculate_corner_ao(s4, s3, c4), // front-left
@@ -179,16 +174,16 @@ impl VoxelMesh {
                 let bottom = block_pos.bottom();
 
                 let [s1, s2, s3, s4] = [
-                    world.block(bottom.back()).is_solid(),
-                    world.block(bottom.right()).is_solid(),
-                    world.block(bottom.front()).is_solid(),
-                    world.block(bottom.left()).is_solid(),
+                    level.block(bottom.back()).is_solid(),
+                    level.block(bottom.right()).is_solid(),
+                    level.block(bottom.front()).is_solid(),
+                    level.block(bottom.left()).is_solid(),
                 ];
                 let [c1, c2, c3, c4] = [
-                    world.block(bottom.back().left()).is_solid(),
-                    world.block(bottom.back().right()).is_solid(),
-                    world.block(bottom.front().right()).is_solid(),
-                    world.block(bottom.front().left()).is_solid(),
+                    level.block(bottom.back().left()).is_solid(),
+                    level.block(bottom.back().right()).is_solid(),
+                    level.block(bottom.front().right()).is_solid(),
+                    level.block(bottom.front().left()).is_solid(),
                 ];
                 [
                     calculate_corner_ao(s4, s3, c4), // front-left
@@ -201,16 +196,16 @@ impl VoxelMesh {
                 let left = block_pos.left();
 
                 let [s1, s2, s3, s4] = [
-                    world.block(left.back()).is_solid(),
-                    world.block(left.top()).is_solid(),
-                    world.block(left.front()).is_solid(),
-                    world.block(left.bottom()).is_solid(),
+                    level.block(left.back()).is_solid(),
+                    level.block(left.top()).is_solid(),
+                    level.block(left.front()).is_solid(),
+                    level.block(left.bottom()).is_solid(),
                 ];
                 let [c1, c2, c3, c4] = [
-                    world.block(left.bottom().back()).is_solid(),
-                    world.block(left.top().back()).is_solid(),
-                    world.block(left.top().front()).is_solid(),
-                    world.block(left.bottom().front()).is_solid(),
+                    level.block(left.bottom().back()).is_solid(),
+                    level.block(left.top().back()).is_solid(),
+                    level.block(left.top().front()).is_solid(),
+                    level.block(left.bottom().front()).is_solid(),
                 ];
                 [
                     calculate_corner_ao(s2, s1, c2), // top-back
@@ -223,16 +218,16 @@ impl VoxelMesh {
                 let right = block_pos.right();
 
                 let [s1, s2, s3, s4] = [
-                    world.block(right.back()).is_solid(),
-                    world.block(right.top()).is_solid(),
-                    world.block(right.front()).is_solid(),
-                    world.block(right.bottom()).is_solid(),
+                    level.block(right.back()).is_solid(),
+                    level.block(right.top()).is_solid(),
+                    level.block(right.front()).is_solid(),
+                    level.block(right.bottom()).is_solid(),
                 ];
                 let [c1, c2, c3, c4] = [
-                    world.block(right.bottom().back()).is_solid(),
-                    world.block(right.top().back()).is_solid(),
-                    world.block(right.top().front()).is_solid(),
-                    world.block(right.bottom().front()).is_solid(),
+                    level.block(right.bottom().back()).is_solid(),
+                    level.block(right.top().back()).is_solid(),
+                    level.block(right.top().front()).is_solid(),
+                    level.block(right.bottom().front()).is_solid(),
                 ];
 
                 [
@@ -246,16 +241,16 @@ impl VoxelMesh {
                 let front = block_pos.front();
 
                 let [s1, s2, s3, s4] = [
-                    world.block(front.bottom()).is_solid(),
-                    world.block(front.right()).is_solid(),
-                    world.block(front.top()).is_solid(),
-                    world.block(front.left()).is_solid(),
+                    level.block(front.bottom()).is_solid(),
+                    level.block(front.right()).is_solid(),
+                    level.block(front.top()).is_solid(),
+                    level.block(front.left()).is_solid(),
                 ];
                 let [c1, c2, c3, c4] = [
-                    world.block(front.bottom().left()).is_solid(),
-                    world.block(front.bottom().right()).is_solid(),
-                    world.block(front.top().right()).is_solid(),
-                    world.block(front.top().left()).is_solid(),
+                    level.block(front.bottom().left()).is_solid(),
+                    level.block(front.bottom().right()).is_solid(),
+                    level.block(front.top().right()).is_solid(),
+                    level.block(front.top().left()).is_solid(),
                 ];
                 [
                     calculate_corner_ao(s4, s3, c4), // top-left
@@ -268,16 +263,16 @@ impl VoxelMesh {
                 let back = block_pos.back();
 
                 let [s1, s2, s3, s4] = [
-                    world.block(back.left()).is_solid(),
-                    world.block(back.top()).is_solid(),
-                    world.block(back.right()).is_solid(),
-                    world.block(back.bottom()).is_solid(),
+                    level.block(back.left()).is_solid(),
+                    level.block(back.top()).is_solid(),
+                    level.block(back.right()).is_solid(),
+                    level.block(back.bottom()).is_solid(),
                 ];
                 let [c1, c2, c3, c4] = [
-                    world.block(back.bottom().left()).is_solid(),
-                    world.block(back.bottom().right()).is_solid(),
-                    world.block(back.top().right()).is_solid(),
-                    world.block(back.top().left()).is_solid(),
+                    level.block(back.bottom().left()).is_solid(),
+                    level.block(back.bottom().right()).is_solid(),
+                    level.block(back.top().right()).is_solid(),
+                    level.block(back.top().left()).is_solid(),
                 ];
                 [
                     calculate_corner_ao(s2, s1, c4), // top-left

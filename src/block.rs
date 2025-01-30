@@ -1,6 +1,6 @@
+use crate::level::Level;
 use crate::position::BlockPos;
 use crate::voxel_mesh::{VoxelFace, VoxelMesh};
-use crate::world::WorldMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(clippy::struct_excessive_bools)]
@@ -48,7 +48,7 @@ impl Block {
     pub fn render(
         self,
         mesh: &mut VoxelMesh,
-        world: &WorldMap,
+        level: &Level,
         block_pos: BlockPos,
         faces: BlockFaces,
     ) {
@@ -62,7 +62,7 @@ impl Block {
         ] {
             if faces.get(face) {
                 mesh.render_face(
-                    world,
+                    level,
                     block_pos,
                     face,
                     #[allow(clippy::match_same_arms)]

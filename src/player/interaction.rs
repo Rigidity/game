@@ -6,8 +6,8 @@ use bevy::{
 use crate::{
     aabb::Aabb,
     block::Block,
+    level::{regenerate_chunk_mesh, Level},
     position::{BlockPos, ChunkPos, CHUNK_SIZE},
-    world::{regenerate_chunk_mesh, WorldMap},
     VoxelMaterials,
 };
 
@@ -25,7 +25,7 @@ pub struct FocusedBlock {
 pub struct InteractionTimer(pub Timer);
 
 pub fn update_focused_block(
-    world: Res<WorldMap>,
+    level: Res<Level>,
     mut focused_block: ResMut<FocusedBlock>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
     camera_query: Query<(&Transform, &Parent), With<PlayerCamera>>,
@@ -43,7 +43,7 @@ pub fn update_focused_block(
     let ray_origin = player_transform.translation + camera_transform.translation;
     let ray_direction = camera_transform.forward().normalize();
 
-    let Some((hit_pos, hit_normal)) = raycast_blocks(&world, ray_origin, ray_direction, MAX_REACH)
+    let Some((hit_pos, hit_normal)) = raycast_blocks(&level, ray_origin, ray_direction, MAX_REACH)
     else {
         focused_block.block_pos = None;
         focused_block.air_pos = None;
@@ -53,13 +53,13 @@ pub fn update_focused_block(
     let block_pos = BlockPos::from_world(hit_pos);
     let air_pos = BlockPos::from_world(hit_pos + hit_normal);
 
-    if world.block(block_pos).is_solid() {
+    if level.block(block_pos).is_solid() {
         focused_block.block_pos = Some(block_pos);
     } else {
         focused_block.block_pos = None;
     }
 
-    if world.block(air_pos).is_air() {
+    if level.block(air_pos).is_air() {
         focused_block.air_pos = Some(air_pos);
     } else {
         focused_block.air_pos = None;
@@ -71,7 +71,7 @@ pub fn break_or_place_block(
     mouse: Res<ButtonInput<MouseButton>>,
     focused_block: Res<FocusedBlock>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
-    mut world: ResMut<WorldMap>,
+    mut level: ResMut<Level>,
     mut timer: ResMut<InteractionTimer>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -109,7 +109,7 @@ pub fn break_or_place_block(
     let chunk_pos = block_pos.chunk_pos();
     let local_pos = block_pos.local_pos();
 
-    let Some(chunk) = world.chunk_mut(chunk_pos) else {
+    let Some(chunk) = level.chunk_mut(chunk_pos) else {
         return;
     };
 
@@ -121,7 +121,7 @@ pub fn break_or_place_block(
 
     regenerate_chunk_mesh(
         &mut commands,
-        &mut world,
+        &mut level,
         chunk_pos,
         &mut meshes,
         &materials,
@@ -145,10 +145,10 @@ pub fn break_or_place_block(
             || local_pos.z() == CHUNK_SIZE as usize - 1
         {
             let neighbor_pos = chunk_pos + offset;
-            if world.chunk(neighbor_pos).is_some() {
+            if level.chunk(neighbor_pos).is_some() {
                 regenerate_chunk_mesh(
                     &mut commands,
-                    &mut world,
+                    &mut level,
                     neighbor_pos,
                     &mut meshes,
                     &materials,
@@ -159,7 +159,7 @@ pub fn break_or_place_block(
 }
 
 fn raycast_blocks(
-    world: &WorldMap,
+    level: &Level,
     ray_origin: Vec3,
     ray_direction: Vec3,
     max_distance: f32,
@@ -170,7 +170,7 @@ fn raycast_blocks(
     for _ in 0..((max_distance / step) as i32) {
         let block_pos = current_pos.floor();
 
-        if world.block(BlockPos::from_world(block_pos)).is_solid() {
+        if level.block(BlockPos::from_world(block_pos)).is_solid() {
             let block_center = block_pos + Vec3::splat(0.5);
             let block_aabb = Aabb::new(block_center, Vec3::ONE);
 

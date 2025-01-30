@@ -12,9 +12,9 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy)]
-pub struct WorldPlugin;
+pub struct LevelPlugin;
 
-impl Plugin for WorldPlugin {
+impl Plugin for LevelPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             OnEnter(GameState::Playing),
@@ -24,13 +24,13 @@ impl Plugin for WorldPlugin {
 }
 
 #[derive(Resource)]
-pub struct WorldMap {
+pub struct Level {
     chunks: HashMap<ChunkPos, Chunk>,
     entities: HashMap<ChunkPos, Entity>,
     noise: Perlin,
 }
 
-impl WorldMap {
+impl Level {
     pub fn new(seed: u32) -> Self {
         Self {
             chunks: HashMap::new(),
@@ -67,7 +67,7 @@ impl WorldMap {
     }
 }
 
-fn generate_chunks(mut world: ResMut<WorldMap>) {
+fn generate_chunks(mut level: ResMut<Level>) {
     // Generate a grid of chunks
     for chunk_x in 0..16 {
         for chunk_y in 0..16 {
@@ -82,7 +82,7 @@ fn generate_chunks(mut world: ResMut<WorldMap>) {
                             let world_y = chunk_y * CHUNK_SIZE + y;
                             let world_z = chunk_z * CHUNK_SIZE + z;
 
-                            let height = world
+                            let height = level
                                 .noise
                                 .get([world_x as f64 * 0.02, world_z as f64 * 0.02]);
                             let surface_height = height * 18.0 + 60.0;
@@ -105,7 +105,7 @@ fn generate_chunks(mut world: ResMut<WorldMap>) {
                     }
                 }
 
-                world.chunks.insert(chunk_pos, chunk);
+                level.chunks.insert(chunk_pos, chunk);
             }
         }
     }
@@ -117,7 +117,7 @@ fn build_chunk_meshes(
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<VoxelMaterial>>,
-    mut world: ResMut<WorldMap>,
+    mut level: ResMut<Level>,
 ) {
     let array_texture = create_texture_array(
         vec![
@@ -137,8 +137,8 @@ fn build_chunk_meshes(
 
     let mut entities = HashMap::new();
 
-    for (&chunk_pos, chunk) in &world.chunks {
-        let mesh = chunk.render(&world, chunk_pos).build();
+    for (&chunk_pos, chunk) in &level.chunks {
+        let mesh = chunk.render(&level, chunk_pos).build();
 
         let entity = commands
             .spawn((
@@ -155,20 +155,20 @@ fn build_chunk_meshes(
         entities.insert(chunk_pos, entity);
     }
 
-    world.entities.extend(entities);
+    level.entities.extend(entities);
 }
 
 pub fn regenerate_chunk_mesh(
     commands: &mut Commands,
-    world: &mut WorldMap,
+    level: &mut Level,
     chunk_pos: ChunkPos,
     meshes: &mut Assets<Mesh>,
     materials: &VoxelMaterials,
 ) {
-    let mesh = world
+    let mesh = level
         .chunk(chunk_pos)
         .unwrap()
-        .render(world, chunk_pos)
+        .render(level, chunk_pos)
         .build();
 
     let new_id = commands
@@ -183,7 +183,7 @@ pub fn regenerate_chunk_mesh(
         ))
         .id();
 
-    if let Some(entity) = world.entities.insert(chunk_pos, new_id) {
+    if let Some(entity) = level.entities.insert(chunk_pos, new_id) {
         commands.entity(entity).despawn();
     }
 }
