@@ -37,7 +37,7 @@ impl Chunk {
         let mut mesh = VoxelMesh::new();
 
         for (index, block) in self.blocks.iter().enumerate() {
-            if block.is_air() {
+            if block == &Block::Air {
                 continue;
             }
 
@@ -52,11 +52,11 @@ impl Chunk {
 
 fn visible_faces(level: &Level, pos: BlockPos) -> BlockFaces {
     BlockFaces {
-        left: level.block(pos.left()).is_air(),
-        right: level.block(pos.right()).is_air(),
-        front: level.block(pos.front()).is_air(),
-        back: level.block(pos.back()).is_air(),
-        top: level.block(pos.top()).is_air(),
-        bottom: level.block(pos.bottom()).is_air(),
+        left: !level.block(pos.left()).is_solid(),
+        right: !level.block(pos.right()).is_solid(),
+        front: !level.block(pos.front()).is_solid(),
+        back: !level.block(pos.back()).is_solid(),
+        top: !level.block(pos.top()).is_solid(),
+        bottom: !level.block(pos.bottom()).is_solid(),
     }
 }

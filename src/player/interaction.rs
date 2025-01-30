@@ -60,7 +60,7 @@ pub fn update_focused_block(
         focused_block.block_pos = None;
     }
 
-    if level.block(air_pos).is_air() {
+    if !level.block(air_pos).is_solid() {
         focused_block.air_pos = Some(air_pos);
     } else {
         focused_block.air_pos = None;

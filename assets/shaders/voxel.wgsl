@@ -81,5 +81,8 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // Apply AO darkening with more subtle transitions
     let ao_factor = mix(0.3, 1.0, in.ao);
-    return vec4<f32>(textureSample(array_texture, array_texture_sampler, in.uv, i32(in.tex_index)).xyz * ao_factor, 1.0);
+    let texture_sample = textureSample(array_texture, array_texture_sampler, in.uv, i32(in.tex_index));
+    
+    // Use all 4 components (including alpha) from the texture
+    return vec4<f32>(texture_sample.xyz * ao_factor, texture_sample.w);
 }

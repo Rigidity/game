@@ -41,6 +41,8 @@ pub struct ImageAssets {
     pub grass_side: Handle<Image>,
     #[asset(path = "Voxels/Grass.png")]
     pub grass: Handle<Image>,
+    #[asset(path = "Voxels/Leaves.png")]
+    pub leaves: Handle<Image>,
 }
 
 #[derive(Debug, Clone, Resource)]
@@ -62,6 +64,10 @@ impl Material for VoxelMaterial {
         "shaders/voxel.wgsl".into()
     }
 
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Blend
+    }
+
     fn specialize(
         _pipeline: &MaterialPipeline<Self>,
         descriptor: &mut RenderPipelineDescriptor,
@@ -73,6 +79,18 @@ impl Material for VoxelMaterial {
             .get_layout(&[VoxelMesh::VOXEL.at_shader_location(0)])?;
 
         descriptor.vertex.buffers = vec![vertex_layout];
+
+        // Basic transparency setup
+        if let Some(target) = &mut descriptor.fragment.as_mut().unwrap().targets[0] {
+            target.blend = Some(bevy::render::render_resource::BlendState::ALPHA_BLENDING);
+            target.write_mask = bevy::render::render_resource::ColorWrites::ALL;
+        }
+
+        if let Some(depth_stencil) = &mut descriptor.depth_stencil {
+            depth_stencil.depth_write_enabled = true;
+            depth_stencil.depth_compare =
+                bevy::render::render_resource::CompareFunction::GreaterEqual;
+        }
 
         Ok(())
     }
@@ -90,6 +108,7 @@ fn setup_global_voxel_material(
             image_assets.dirt.clone(),
             image_assets.grass_side.clone(),
             image_assets.grass.clone(),
+            image_assets.leaves.clone(),
         ],
         &mut images,
     )
@@ -111,7 +130,7 @@ fn create_texture_array(
             depth_or_array_layers: 1,
         },
         TextureDimension::D2,
-        &Srgba::WHITE.to_u8_array(),
+        &[0, 0, 0, 0],
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::all(),
     );
@@ -127,6 +146,10 @@ fn create_texture_array(
     }
 
     array_image.reinterpret_stacked_2d_as_array(2048);
+
+    array_image.texture_descriptor.usage =
+        bevy::render::render_resource::TextureUsages::TEXTURE_BINDING
+            | bevy::render::render_resource::TextureUsages::COPY_DST;
 
     Ok(images.add(array_image))
 }

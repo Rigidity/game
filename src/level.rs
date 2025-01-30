@@ -1,6 +1,10 @@
+use std::hash::{Hash, Hasher};
+
 use bevy::{prelude::*, utils::HashMap, utils::HashSet};
 use bevy_tokio_tasks::TokioTasksRuntime;
-use noise::{NoiseFn, Perlin};
+use noise::{NoiseFn, Perlin, Seedable};
+use rand::prelude::*;
+use rand_chacha::ChaCha8Rng;
 use sqlx::SqlitePool;
 
 use crate::{
@@ -14,6 +18,10 @@ use crate::{
 
 const CHUNK_UNLOAD_DISTANCE: i32 = 16; // Should be larger than generation radius
 const CHUNK_GENERATION_BATCH_SIZE: usize = 8; // Adjust this value as needed
+const TREE_HEIGHT: i32 = 12; // Tall but not gigantic
+const TREE_RADIUS: i32 = 3; // Reasonable canopy size
+const HOUSE_SIZE: i32 = 5;
+const STRUCTURE_ATTEMPT_SPACING: i32 = 10; // Increased structure density
 
 #[derive(Debug, Clone, Copy)]
 pub struct LevelPlugin;
@@ -77,9 +85,161 @@ impl LevelGenerator {
         ])
     }
 
+    fn get_structure_rng(&self, pos: BlockPos) -> ChaCha8Rng {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        pos.hash(&mut hasher);
+        let hash = hasher.finish();
+        ChaCha8Rng::seed_from_u64(hash ^ self.noise.seed() as u64)
+    }
+
+    // Add this helper function to find structure origins that could affect a chunk
+    fn get_structure_positions_affecting_chunk(&self, chunk_pos: ChunkPos) -> Vec<BlockPos> {
+        let chunk_min = chunk_pos.world_pos();
+        let chunk_max = (chunk_pos + ChunkPos::new(1, 1, 1)).world_pos();
+        let structure_radius = (HOUSE_SIZE.max(TREE_HEIGHT + TREE_RADIUS) + 1) as f32;
+
+        // Calculate the grid positions that could affect this chunk
+        let min_x =
+            ((chunk_min.x - structure_radius) / STRUCTURE_ATTEMPT_SPACING as f32).floor() as i32;
+        let max_x =
+            ((chunk_max.x + structure_radius) / STRUCTURE_ATTEMPT_SPACING as f32).ceil() as i32;
+        let min_z =
+            ((chunk_min.z - structure_radius) / STRUCTURE_ATTEMPT_SPACING as f32).floor() as i32;
+        let max_z =
+            ((chunk_max.z + structure_radius) / STRUCTURE_ATTEMPT_SPACING as f32).ceil() as i32;
+
+        // Calculate Y range to check for structures that could affect this chunk
+        let check_height = TREE_HEIGHT + TREE_RADIUS;
+        let min_y = chunk_pos.y - (check_height / CHUNK_SIZE as i32) - 1;
+        let max_y = chunk_pos.y + (check_height / CHUNK_SIZE as i32) + 1;
+
+        let mut positions = Vec::new();
+
+        for x in min_x..=max_x {
+            for y in min_y..=max_y {
+                for z in min_z..=max_z {
+                    // Get the structure origin point
+                    let origin = BlockPos::new(
+                        x * STRUCTURE_ATTEMPT_SPACING,
+                        y * CHUNK_SIZE as i32,
+                        z * STRUCTURE_ATTEMPT_SPACING,
+                    );
+                    positions.push(origin);
+                }
+            }
+        }
+
+        positions
+    }
+
+    fn set_block_world(&self, chunks: &mut HashMap<ChunkPos, Chunk>, pos: BlockPos, block: Block) {
+        let chunk_pos = pos.chunk_pos();
+        let local_pos = pos.local_pos();
+
+        // Get or create the chunk
+        chunks.entry(chunk_pos).or_default().set(local_pos, block);
+    }
+
+    fn generate_tree(
+        &self,
+        chunks: &mut HashMap<ChunkPos, Chunk>,
+        chunk_pos: ChunkPos,
+        base_pos: LocalPos,
+        rng: &mut ChaCha8Rng,
+    ) {
+        let base_world_pos = base_pos.block_pos(chunk_pos);
+        let height = TREE_HEIGHT + (rng.random::<i32>() % 3); // Less variation
+
+        // Generate single-block trunk
+        for y in 0..height {
+            let pos = base_world_pos + BlockPos::new(0, y, 0);
+            self.set_block_world(chunks, pos, Block::Dirt); // Dirt trunk
+        }
+
+        // Generate Minecraft-style leaf arrangement
+        let leaf_start = height - 4;
+        let leaf_height = 5;
+
+        for y in 0..leaf_height {
+            let y_pos = leaf_start + y;
+            // Radius varies by height - wider in middle, narrower at top/bottom
+            let radius = if y == 0 || y == leaf_height - 1 { 1 } else { 2 };
+
+            for x in -radius..=radius {
+                for z in -radius..=radius {
+                    // Skip corners for rounder appearance
+                    if x * x + z * z > radius * radius + 1 {
+                        continue;
+                    }
+
+                    // Add some randomness to leaf placement
+                    if (x == radius || x == -radius || z == radius || z == -radius)
+                        && rng.random::<f32>() < 0.5
+                    {
+                        continue;
+                    }
+
+                    let pos = base_world_pos + BlockPos::new(x, y_pos, z);
+                    self.set_block_world(chunks, pos, Block::Leaves);
+                }
+            }
+        }
+
+        // Add a few random extra leaves for variety
+        for _ in 0..3 {
+            let x = rng.random_range(-2..=2);
+            let z = rng.random_range(-2..=2);
+            let y = rng.random_range(leaf_start..leaf_start + leaf_height);
+
+            if x != 0 || z != 0 {
+                // Don't place on trunk
+                let pos = base_world_pos + BlockPos::new(x, y, z);
+                self.set_block_world(chunks, pos, Block::Leaves);
+            }
+        }
+    }
+
+    fn generate_house(
+        &self,
+        chunks: &mut HashMap<ChunkPos, Chunk>,
+        chunk_pos: ChunkPos,
+        base_pos: LocalPos,
+        rng: &mut ChaCha8Rng,
+    ) {
+        let base_world_pos = base_pos.block_pos(chunk_pos);
+        let size = HOUSE_SIZE + (rng.random::<i32>() % 2);
+        let height = size - 1;
+
+        // Generate walls
+        for y in 0..height {
+            for x in 0..size {
+                for z in 0..size {
+                    if x == 0 || x == size - 1 || z == 0 || z == size - 1 {
+                        let pos = base_world_pos + BlockPos::new(x, y, z);
+                        self.set_block_world(chunks, pos, Block::Rock);
+                    }
+                }
+            }
+        }
+
+        // Generate roof
+        for x in -1..=size {
+            for z in -1..=size {
+                let pos = base_world_pos + BlockPos::new(x, height, z);
+                self.set_block_world(chunks, pos, Block::Rock);
+            }
+        }
+
+        // Add door
+        let door_pos = base_world_pos + BlockPos::new(0, 1, size / 2);
+        self.set_block_world(chunks, door_pos, Block::Air);
+    }
+
     fn generate_chunk(&mut self, chunk_pos: ChunkPos) -> Chunk {
+        let mut chunks = HashMap::new();
         let mut chunk = Chunk::new();
 
+        // Generate terrain first
         for x in 0..CHUNK_SIZE {
             for y in 0..CHUNK_SIZE {
                 for z in 0..CHUNK_SIZE {
@@ -115,7 +275,45 @@ impl LevelGenerator {
             }
         }
 
-        chunk
+        // Insert the terrain-generated chunk into the chunks map
+        chunks.insert(chunk_pos, chunk);
+
+        // Get all possible structure positions that could affect this chunk
+        let structure_positions = self.get_structure_positions_affecting_chunk(chunk_pos);
+
+        // Try generating structures at each position
+        for pos in structure_positions {
+            let world_pos = pos.world_pos();
+
+            // Check density at structure position
+            let density_factor = self.get_density_factor(&world_pos);
+            let terrain_density = self.get_terrain_density(&world_pos);
+
+            // Only generate if we're at an air/ground boundary
+            if terrain_density > density_factor {
+                continue;
+            }
+
+            let below_pos = world_pos + Vec3::new(0.0, -1.0, 0.0);
+            let below_density_factor = self.get_density_factor(&below_pos);
+            let below_terrain_density = self.get_terrain_density(&below_pos);
+            if below_terrain_density <= below_density_factor {
+                continue;
+            }
+
+            // Use deterministic RNG for this position
+            let mut rng = self.get_structure_rng(pos);
+
+            // Generate the structure
+            if rng.random::<f32>() < 0.9 {
+                self.generate_tree(&mut chunks, pos.chunk_pos(), pos.local_pos(), &mut rng);
+            } else {
+                self.generate_house(&mut chunks, pos.chunk_pos(), pos.local_pos(), &mut rng);
+            }
+        }
+
+        // Return the current chunk
+        chunks.remove(&chunk_pos).unwrap_or_else(Chunk::new)
     }
 }
 
