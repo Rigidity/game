@@ -2,8 +2,8 @@ use std::ops::Add;
 
 use bevy::prelude::*;
 
-pub const CHUNK_SIZE: i32 = 16;
-pub const CHUNK_INDICES: usize = (CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE) as usize;
+pub const CHUNK_SIZE: usize = 16;
+pub const CHUNK_INDICES: usize = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BlockPos {
@@ -34,18 +34,22 @@ impl BlockPos {
 
     pub fn chunk_pos(self) -> ChunkPos {
         ChunkPos::new(
-            self.x.div_euclid(CHUNK_SIZE),
-            self.y.div_euclid(CHUNK_SIZE),
-            self.z.div_euclid(CHUNK_SIZE),
+            self.x.div_euclid(CHUNK_SIZE as i32),
+            self.y.div_euclid(CHUNK_SIZE as i32),
+            self.z.div_euclid(CHUNK_SIZE as i32),
         )
     }
 
     pub fn local_pos(self) -> LocalPos {
         LocalPos {
-            x: self.x.rem_euclid(CHUNK_SIZE),
-            y: self.y.rem_euclid(CHUNK_SIZE),
-            z: self.z.rem_euclid(CHUNK_SIZE),
+            x: self.x.rem_euclid(CHUNK_SIZE as i32) as usize,
+            y: self.y.rem_euclid(CHUNK_SIZE as i32) as usize,
+            z: self.z.rem_euclid(CHUNK_SIZE as i32) as usize,
         }
+    }
+
+    pub fn world_pos(self) -> Vec3 {
+        Vec3::new(self.x as f32, self.y as f32, self.z as f32)
     }
 
     pub fn center(self) -> Vec3 {
@@ -95,57 +99,37 @@ impl Add for BlockPos {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LocalPos {
-    x: i32,
-    y: i32,
-    z: i32,
+    pub x: usize,
+    pub y: usize,
+    pub z: usize,
 }
 
 impl LocalPos {
-    pub fn new(x: usize, y: usize, z: usize) -> Option<Self> {
-        if x >= CHUNK_SIZE as usize || y >= CHUNK_SIZE as usize || z >= CHUNK_SIZE as usize {
-            return None;
-        }
-        Some(Self {
-            x: x as i32,
-            y: y as i32,
-            z: z as i32,
-        })
+    pub fn new(x: usize, y: usize, z: usize) -> Self {
+        Self { x, y, z }
     }
 
     pub fn from_index(index: usize) -> Self {
-        let index = index as i32;
         let x = index % CHUNK_SIZE;
         let y = (index / CHUNK_SIZE) % CHUNK_SIZE;
         let z = index / (CHUNK_SIZE * CHUNK_SIZE);
         Self { x, y, z }
     }
 
-    pub fn x(&self) -> usize {
-        self.x as usize
-    }
-
-    pub fn y(&self) -> usize {
-        self.y as usize
-    }
-
-    pub fn z(&self) -> usize {
-        self.z as usize
-    }
-
     pub fn index(self) -> usize {
-        (self.x + self.y * CHUNK_SIZE + self.z * CHUNK_SIZE * CHUNK_SIZE) as usize
+        self.x + self.y * CHUNK_SIZE + self.z * CHUNK_SIZE * CHUNK_SIZE
     }
 
     pub fn block_pos(self, chunk_pos: ChunkPos) -> BlockPos {
         BlockPos::new(
-            chunk_pos.x * CHUNK_SIZE + self.x,
-            chunk_pos.y * CHUNK_SIZE + self.y,
-            chunk_pos.z * CHUNK_SIZE + self.z,
+            chunk_pos.x * CHUNK_SIZE as i32 + self.x as i32,
+            chunk_pos.y * CHUNK_SIZE as i32 + self.y as i32,
+            chunk_pos.z * CHUNK_SIZE as i32 + self.z as i32,
         )
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Component)]
 pub struct ChunkPos {
     pub x: i32,
     pub y: i32,

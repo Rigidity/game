@@ -65,11 +65,11 @@ impl VoxelMesh {
         ao: u32,
     ) -> u32 {
         self.positions
-            .push(Vec3::new(pos.x() as f32, pos.y() as f32, pos.z() as f32));
+            .push(Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32));
 
-        let x = (pos.x() as u32 & 0x0F) << 28;
-        let y = (pos.y() as u32 & 0x0F) << 24;
-        let z = (pos.z() as u32 & 0x0F) << 20;
+        let x = (pos.x as u32 & 0x0F) << 28;
+        let y = (pos.y as u32 & 0x0F) << 24;
+        let z = (pos.z as u32 & 0x0F) << 20;
         let corner = (corner.to_index()) << 18;
         let face = (face as u32) << 15;
         let ao = (ao & 0x3) << 13; // Pack AO into bits 13-14

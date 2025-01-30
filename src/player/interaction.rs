@@ -6,9 +6,8 @@ use bevy::{
 use crate::{
     aabb::Aabb,
     block::Block,
-    level::{regenerate_chunk_mesh, Level},
+    level::{Dirty, Level},
     position::{BlockPos, ChunkPos, CHUNK_SIZE},
-    VoxelMaterials,
 };
 
 use super::{Player, PlayerCamera};
@@ -74,8 +73,6 @@ pub fn break_or_place_block(
     mut level: ResMut<Level>,
     mut timer: ResMut<InteractionTimer>,
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    materials: Res<VoxelMaterials>,
 ) {
     timer.0.tick(time.delta());
 
@@ -119,13 +116,9 @@ pub fn break_or_place_block(
         chunk.set(local_pos, Block::Rock);
     }
 
-    regenerate_chunk_mesh(
-        &mut commands,
-        &mut level,
-        chunk_pos,
-        &mut meshes,
-        &materials,
-    );
+    if let Some(entity) = level.entity(chunk_pos) {
+        commands.entity(entity).insert(Dirty);
+    }
 
     let neighbors = [
         ChunkPos::X,
@@ -137,22 +130,16 @@ pub fn break_or_place_block(
     ];
 
     for &offset in &neighbors {
-        if local_pos.x() == 0
-            || local_pos.x() == CHUNK_SIZE as usize - 1
-            || local_pos.y() == 0
-            || local_pos.y() == CHUNK_SIZE as usize - 1
-            || local_pos.z() == 0
-            || local_pos.z() == CHUNK_SIZE as usize - 1
+        if local_pos.x == 0
+            || local_pos.x == CHUNK_SIZE - 1
+            || local_pos.y == 0
+            || local_pos.y == CHUNK_SIZE - 1
+            || local_pos.z == 0
+            || local_pos.z == CHUNK_SIZE - 1
         {
             let neighbor_pos = chunk_pos + offset;
-            if level.chunk(neighbor_pos).is_some() {
-                regenerate_chunk_mesh(
-                    &mut commands,
-                    &mut level,
-                    neighbor_pos,
-                    &mut meshes,
-                    &materials,
-                );
+            if let Some(entity) = level.entity(neighbor_pos) {
+                commands.entity(entity).insert(Dirty);
             }
         }
     }

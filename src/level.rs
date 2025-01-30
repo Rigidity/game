@@ -2,13 +2,11 @@ use bevy::{prelude::*, utils::HashMap};
 use noise::{NoiseFn, Perlin};
 
 use crate::{
-    block::{Block, BlockFaces},
+    block::Block,
     chunk::Chunk,
     game_state::GameState,
+    loader::GlobalVoxelMaterial,
     position::{BlockPos, ChunkPos, LocalPos, CHUNK_SIZE},
-    texture_array::create_texture_array,
-    voxel_material::VoxelMaterial,
-    ImageAssets, VoxelMaterials,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -16,17 +14,23 @@ pub struct LevelPlugin;
 
 impl Plugin for LevelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            OnEnter(GameState::Playing),
-            (generate_chunks, build_chunk_meshes).chain(),
-        );
+        app.insert_resource(Level::new(42))
+            .add_systems(OnEnter(GameState::Playing), generate_chunks)
+            .add_systems(
+                Update,
+                build_chunk_meshes.run_if(in_state(GameState::Playing)),
+            );
     }
+}
+
+struct LoadedChunk {
+    chunk: Chunk,
+    entity: Entity,
 }
 
 #[derive(Resource)]
 pub struct Level {
-    chunks: HashMap<ChunkPos, Chunk>,
-    entities: HashMap<ChunkPos, Entity>,
+    chunks: HashMap<ChunkPos, LoadedChunk>,
     noise: Perlin,
 }
 
@@ -34,17 +38,20 @@ impl Level {
     pub fn new(seed: u32) -> Self {
         Self {
             chunks: HashMap::new(),
-            entities: HashMap::new(),
             noise: Perlin::new(seed),
         }
     }
 
     pub fn chunk(&self, pos: ChunkPos) -> Option<&Chunk> {
-        self.chunks.get(&pos)
+        self.chunks.get(&pos).map(|loaded| &loaded.chunk)
     }
 
     pub fn chunk_mut(&mut self, pos: ChunkPos) -> Option<&mut Chunk> {
-        self.chunks.get_mut(&pos)
+        self.chunks.get_mut(&pos).map(|loaded| &mut loaded.chunk)
+    }
+
+    pub fn entity(&self, pos: ChunkPos) -> Option<Entity> {
+        self.chunks.get(&pos).map(|loaded| loaded.entity)
     }
 
     pub fn block(&self, pos: BlockPos) -> Block {
@@ -55,57 +62,67 @@ impl Level {
             .unwrap_or(Block::Air)
     }
 
-    pub fn visible_faces(&self, pos: BlockPos) -> BlockFaces {
-        BlockFaces {
-            left: self.block(pos.left()).is_air(),
-            right: self.block(pos.right()).is_air(),
-            front: self.block(pos.front()).is_air(),
-            back: self.block(pos.back()).is_air(),
-            top: self.block(pos.top()).is_air(),
-            bottom: self.block(pos.bottom()).is_air(),
+    fn generate_chunk(&mut self, chunk_pos: ChunkPos) -> Chunk {
+        let mut chunk = Chunk::new();
+
+        for x in 0..CHUNK_SIZE {
+            for y in 0..CHUNK_SIZE {
+                for z in 0..CHUNK_SIZE {
+                    let local_pos = LocalPos::new(x, y, z);
+                    let pos = local_pos.block_pos(chunk_pos).world_pos();
+
+                    let height = self.noise.get([pos.x as f64 * 0.02, pos.z as f64 * 0.02]);
+                    let surface_height = height * 18.0 + 60.0;
+
+                    if (pos.y as f64) < surface_height {
+                        let block_type = if (surface_height - (pos.y as f64)) <= 1.0 {
+                            Block::Grass
+                        } else if (surface_height - (pos.y as f64)) <= 3.0 {
+                            Block::Dirt
+                        } else {
+                            Block::Rock
+                        };
+
+                        chunk.set(LocalPos::new(x, y, z), block_type);
+                    }
+                }
+            }
         }
+
+        chunk
     }
 }
 
-fn generate_chunks(mut level: ResMut<Level>) {
-    // Generate a grid of chunks
+#[derive(Debug, Clone, Copy, Component)]
+pub struct Dirty;
+
+fn generate_chunks(
+    mut commands: Commands,
+    mut level: ResMut<Level>,
+    material: Res<GlobalVoxelMaterial>,
+) {
     for chunk_x in 0..16 {
         for chunk_y in 0..16 {
             for chunk_z in 0..16 {
-                let mut chunk = Chunk::new();
                 let chunk_pos = ChunkPos::new(chunk_x, chunk_y, chunk_z);
+                let chunk = level.generate_chunk(chunk_pos);
 
-                for x in 0..CHUNK_SIZE {
-                    for y in 0..CHUNK_SIZE {
-                        for z in 0..CHUNK_SIZE {
-                            let world_x = chunk_x * CHUNK_SIZE + x;
-                            let world_y = chunk_y * CHUNK_SIZE + y;
-                            let world_z = chunk_z * CHUNK_SIZE + z;
+                let entity = commands
+                    .spawn((
+                        chunk_pos,
+                        Dirty,
+                        MeshMaterial3d(material.0.clone()),
+                        Transform::from_xyz(
+                            chunk_pos.x as f32 * 16.0,
+                            chunk_pos.y as f32 * 16.0,
+                            chunk_pos.z as f32 * 16.0,
+                        ),
+                    ))
+                    .id();
 
-                            let height = level
-                                .noise
-                                .get([world_x as f64 * 0.02, world_z as f64 * 0.02]);
-                            let surface_height = height * 18.0 + 60.0;
-
-                            if (world_y as f64) < surface_height {
-                                let block_type = if (surface_height - (world_y as f64)) <= 1.0 {
-                                    Block::Grass
-                                } else if (surface_height - (world_y as f64)) <= 3.0 {
-                                    Block::Dirt
-                                } else {
-                                    Block::Rock
-                                };
-
-                                chunk.set(
-                                    LocalPos::new(x as usize, y as usize, z as usize).unwrap(),
-                                    block_type,
-                                );
-                            }
-                        }
-                    }
-                }
-
-                level.chunks.insert(chunk_pos, chunk);
+                level
+                    .chunks
+                    .insert(chunk_pos, LoadedChunk { chunk, entity });
             }
         }
     }
@@ -113,77 +130,20 @@ fn generate_chunks(mut level: ResMut<Level>) {
 
 fn build_chunk_meshes(
     mut commands: Commands,
-    image_assets: Res<ImageAssets>,
-    mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<VoxelMaterial>>,
-    mut level: ResMut<Level>,
+    level: Res<Level>,
+    query: Query<(Entity, &ChunkPos), With<Dirty>>,
 ) {
-    let array_texture = create_texture_array(
-        vec![
-            image_assets.rock.clone(),
-            image_assets.dirt.clone(),
-            image_assets.grass_side.clone(),
-            image_assets.grass.clone(),
-        ],
-        &mut images,
-    )
-    .unwrap();
-    let material = materials.add(VoxelMaterial { array_texture });
+    for (entity, &chunk_pos) in query.iter() {
+        let Some(chunk) = level.chunk(chunk_pos) else {
+            continue;
+        };
 
-    commands.insert_resource(VoxelMaterials {
-        material: material.clone(),
-    });
-
-    let mut entities = HashMap::new();
-
-    for (&chunk_pos, chunk) in &level.chunks {
         let mesh = chunk.render(&level, chunk_pos).build();
 
-        let entity = commands
-            .spawn((
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(material.clone()),
-                Transform::from_xyz(
-                    chunk_pos.x as f32 * 16.0,
-                    chunk_pos.y as f32 * 16.0,
-                    chunk_pos.z as f32 * 16.0,
-                ),
-            ))
-            .id();
-
-        entities.insert(chunk_pos, entity);
-    }
-
-    level.entities.extend(entities);
-}
-
-pub fn regenerate_chunk_mesh(
-    commands: &mut Commands,
-    level: &mut Level,
-    chunk_pos: ChunkPos,
-    meshes: &mut Assets<Mesh>,
-    materials: &VoxelMaterials,
-) {
-    let mesh = level
-        .chunk(chunk_pos)
-        .unwrap()
-        .render(level, chunk_pos)
-        .build();
-
-    let new_id = commands
-        .spawn((
-            Mesh3d(meshes.add(mesh)),
-            MeshMaterial3d(materials.material.clone()),
-            Transform::from_xyz(
-                chunk_pos.x as f32 * 16.0,
-                chunk_pos.y as f32 * 16.0,
-                chunk_pos.z as f32 * 16.0,
-            ),
-        ))
-        .id();
-
-    if let Some(entity) = level.entities.insert(chunk_pos, new_id) {
-        commands.entity(entity).despawn();
+        commands
+            .entity(entity)
+            .insert(Mesh3d(meshes.add(mesh)))
+            .remove::<Dirty>();
     }
 }

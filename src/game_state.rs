@@ -4,5 +4,6 @@ use bevy::state::state::States;
 pub enum GameState {
     #[default]
     Loading,
+    Setup,
     Playing,
 }

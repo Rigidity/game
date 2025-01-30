@@ -1,7 +1,7 @@
 use crate::{
-    block::Block,
+    block::{Block, BlockFaces},
     level::Level,
-    position::{ChunkPos, LocalPos, CHUNK_INDICES},
+    position::{BlockPos, ChunkPos, LocalPos, CHUNK_INDICES},
     voxel_mesh::VoxelMesh,
 };
 
@@ -40,10 +40,21 @@ impl Chunk {
             }
 
             let block_pos = LocalPos::from_index(index).block_pos(chunk_pos);
-            let faces = level.visible_faces(block_pos);
+            let faces = visible_faces(level, block_pos);
             block.render(&mut mesh, level, block_pos, faces);
         }
 
         mesh
+    }
+}
+
+fn visible_faces(level: &Level, pos: BlockPos) -> BlockFaces {
+    BlockFaces {
+        left: level.block(pos.left()).is_air(),
+        right: level.block(pos.right()).is_air(),
+        front: level.block(pos.front()).is_air(),
+        back: level.block(pos.back()).is_air(),
+        top: level.block(pos.top()).is_air(),
+        bottom: level.block(pos.bottom()).is_air(),
     }
 }

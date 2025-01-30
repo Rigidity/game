@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{aabb::Aabb, game_state::GameState, player::Player, position::BlockPos, Level};
+use crate::{aabb::Aabb, game_state::GameState, level::Level, player::Player, position::BlockPos};
 
 #[derive(Debug, Clone, Copy)]
 pub struct PhysicsPlugin;
