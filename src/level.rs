@@ -16,7 +16,8 @@ pub struct LevelPlugin;
 
 impl Plugin for LevelPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(Level::new(42))
+        app.insert_resource(Level::new())
+            .insert_resource(LevelGenerator::new(42))
             .add_systems(OnEnter(GameState::Setup), setup_level)
             .add_systems(OnEnter(GameState::Playing), generate_chunks)
             .add_systems(
@@ -26,6 +27,7 @@ impl Plugin for LevelPlugin {
     }
 }
 
+#[derive(Debug, Clone)]
 struct LoadedChunk {
     chunk: Chunk,
     entity: Entity,
@@ -34,38 +36,16 @@ struct LoadedChunk {
 #[derive(Resource)]
 struct LevelDatabase(SqlitePool);
 
-#[derive(Resource)]
-pub struct Level {
-    chunks: HashMap<ChunkPos, LoadedChunk>,
+#[derive(Debug, Default, Clone, Resource)]
+pub struct LevelGenerator {
     noise: Perlin,
 }
 
-impl Level {
+impl LevelGenerator {
     pub fn new(seed: u32) -> Self {
         Self {
-            chunks: HashMap::new(),
             noise: Perlin::new(seed),
         }
-    }
-
-    pub fn chunk(&self, pos: ChunkPos) -> Option<&Chunk> {
-        self.chunks.get(&pos).map(|loaded| &loaded.chunk)
-    }
-
-    pub fn chunk_mut(&mut self, pos: ChunkPos) -> Option<&mut Chunk> {
-        self.chunks.get_mut(&pos).map(|loaded| &mut loaded.chunk)
-    }
-
-    pub fn entity(&self, pos: ChunkPos) -> Option<Entity> {
-        self.chunks.get(&pos).map(|loaded| loaded.entity)
-    }
-
-    pub fn block(&self, pos: BlockPos) -> Block {
-        let chunk_pos = pos.chunk_pos();
-        let local_pos = pos.local_pos();
-        self.chunk(chunk_pos)
-            .map(|chunk| chunk.get(local_pos))
-            .unwrap_or(Block::Air)
     }
 
     fn get_density_factor(&self, pos: &Vec3) -> f64 {
@@ -128,6 +108,39 @@ impl Level {
     }
 }
 
+#[derive(Debug, Default, Clone, Resource)]
+pub struct Level {
+    chunks: HashMap<ChunkPos, LoadedChunk>,
+}
+
+impl Level {
+    pub fn new() -> Self {
+        Self {
+            chunks: HashMap::new(),
+        }
+    }
+
+    pub fn chunk(&self, pos: ChunkPos) -> Option<&Chunk> {
+        self.chunks.get(&pos).map(|loaded| &loaded.chunk)
+    }
+
+    pub fn chunk_mut(&mut self, pos: ChunkPos) -> Option<&mut Chunk> {
+        self.chunks.get_mut(&pos).map(|loaded| &mut loaded.chunk)
+    }
+
+    pub fn entity(&self, pos: ChunkPos) -> Option<Entity> {
+        self.chunks.get(&pos).map(|loaded| loaded.entity)
+    }
+
+    pub fn block(&self, pos: BlockPos) -> Block {
+        let chunk_pos = pos.chunk_pos();
+        let local_pos = pos.local_pos();
+        self.chunk(chunk_pos)
+            .map(|chunk| chunk.get(local_pos))
+            .unwrap_or(Block::Air)
+    }
+}
+
 #[derive(Debug, Clone, Copy, Component)]
 pub struct Dirty;
 
@@ -153,35 +166,81 @@ fn setup_level(runtime: ResMut<TokioTasksRuntime>) {
 }
 
 fn generate_chunks(
-    mut commands: Commands,
-    mut level: ResMut<Level>,
     material: Res<GlobalVoxelMaterial>,
+    db: Res<LevelDatabase>,
+    runtime: Res<TokioTasksRuntime>,
+    generator: Res<LevelGenerator>,
 ) {
-    for chunk_x in 0..16 {
-        for chunk_y in 0..16 {
-            for chunk_z in 0..16 {
-                let chunk_pos = ChunkPos::new(chunk_x, chunk_y, chunk_z);
-                let chunk = level.generate_chunk(chunk_pos);
+    let db = db.0.clone();
+    let material = material.0.clone();
+    let mut generator = generator.clone();
 
-                let entity = commands
-                    .spawn((
-                        chunk_pos,
-                        Dirty,
-                        MeshMaterial3d(material.0.clone()),
-                        Transform::from_xyz(
-                            chunk_pos.x as f32 * 16.0,
-                            chunk_pos.y as f32 * 16.0,
-                            chunk_pos.z as f32 * 16.0,
-                        ),
-                    ))
-                    .id();
+    runtime.spawn_background_task(|mut ctx| async move {
+        for chunk_x in 0..16 {
+            for chunk_y in 0..16 {
+                for chunk_z in 0..16 {
+                    let chunk_pos = ChunkPos::new(chunk_x, chunk_y, chunk_z);
 
-                level
-                    .chunks
-                    .insert(chunk_pos, LoadedChunk { chunk, entity });
+                    // Try to load from database first
+                    let chunk = match sqlx::query!(
+                        "SELECT data FROM chunks WHERE x = ? AND y = ? AND z = ?",
+                        chunk_pos.x,
+                        chunk_pos.y,
+                        chunk_pos.z
+                    )
+                    .fetch_optional(&db)
+                    .await
+                    .unwrap()
+                    {
+                        Some(row) => bincode::deserialize(&row.data).unwrap(),
+                        None => {
+                            // If not in database, generate and save
+                            let chunk = generator.generate_chunk(chunk_pos);
+
+                            let data = bincode::serialize(&chunk).unwrap();
+                            sqlx::query!(
+                                "INSERT INTO chunks (x, y, z, data) VALUES (?, ?, ?, ?)",
+                                chunk_pos.x,
+                                chunk_pos.y,
+                                chunk_pos.z,
+                                data
+                            )
+                            .execute(&db)
+                            .await
+                            .unwrap();
+
+                            chunk
+                        }
+                    };
+
+                    let material = material.clone();
+
+                    ctx.run_on_main_thread(move |ctx| {
+                        let entity = ctx
+                            .world
+                            .commands()
+                            .spawn((
+                                chunk_pos,
+                                Dirty,
+                                MeshMaterial3d(material),
+                                Transform::from_xyz(
+                                    chunk_pos.x as f32 * 16.0,
+                                    chunk_pos.y as f32 * 16.0,
+                                    chunk_pos.z as f32 * 16.0,
+                                ),
+                            ))
+                            .id();
+
+                        ctx.world
+                            .resource_mut::<Level>()
+                            .chunks
+                            .insert(chunk_pos, LoadedChunk { chunk, entity });
+                    })
+                    .await;
+                }
             }
         }
-    }
+    });
 }
 
 fn build_chunk_meshes(
