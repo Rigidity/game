@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO chunks (x, y, z, data) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "110c1d508af8a51c2a1be920a64bb3821f54591f2e8593cab163cb0706cb2abf"
+}

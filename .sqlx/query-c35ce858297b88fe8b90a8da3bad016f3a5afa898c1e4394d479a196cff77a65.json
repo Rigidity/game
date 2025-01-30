@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE chunks SET data = ? WHERE x = ? AND y = ? AND z = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "c35ce858297b88fe8b90a8da3bad016f3a5afa898c1e4394d479a196cff77a65"
+}
