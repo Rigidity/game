@@ -61,9 +61,9 @@ impl Block {
             VoxelFace::Bottom,
         ] {
             if faces.get(face) {
-                let ao = world.ambient_occlusion(block_pos, face);
-                mesh.add_face(
-                    block_pos.local_pos(),
+                mesh.render_face(
+                    world,
+                    block_pos,
                     face,
                     #[allow(clippy::match_same_arms)]
                     match (self, face) {
@@ -74,7 +74,6 @@ impl Block {
                         (Self::Grass, VoxelFace::Bottom) => 1,
                         (Self::Grass, _) => 2,
                     },
-                    ao,
                 );
             }
         }
