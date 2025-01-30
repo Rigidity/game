@@ -2,7 +2,6 @@ use bevy::{prelude::*, utils::HashMap, utils::HashSet};
 use bevy_tokio_tasks::TokioTasksRuntime;
 use noise::{NoiseFn, Perlin};
 use sqlx::SqlitePool;
-use std::collections::VecDeque;
 
 use crate::{
     block::Block,
@@ -28,7 +27,6 @@ impl Plugin for LevelPlugin {
             .add_systems(
                 Update,
                 (
-                    queue_chunks_around_player,
                     generate_chunk_batch,
                     build_chunk_meshes,
                     unload_distant_chunks,
@@ -159,21 +157,14 @@ pub struct Dirty;
 #[derive(Debug, Clone, Copy, Component)]
 pub struct Modified;
 
-#[derive(Debug)]
-struct QueuedChunk {
-    pos: ChunkPos,
-    distance_sq: i32,
-}
-
 #[derive(Debug, Default, Resource)]
 struct ChunkGenerationQueue {
     pending: HashSet<ChunkPos>,
-    queue: VecDeque<QueuedChunk>,
 }
 
 #[derive(Debug, Default, Resource)]
 struct ChunkGenerationTask {
-    in_progress: bool,
+    running: bool,
 }
 
 fn setup_level(runtime: ResMut<TokioTasksRuntime>) {
@@ -194,99 +185,94 @@ fn setup_level(runtime: ResMut<TokioTasksRuntime>) {
     });
 }
 
-fn queue_chunks_around_player(
-    mut queue: ResMut<ChunkGenerationQueue>,
-    level: Res<Level>,
-    player_query: Query<&Transform, With<Player>>,
-) {
-    let Ok(player_transform) = player_query.get_single() else {
-        return;
-    };
-
-    let player_pos = player_transform.translation;
-    let player_chunk = BlockPos::from_world(player_pos).chunk_pos();
-    let radius = 12;
-
-    let mut new_chunks = Vec::new();
-
-    for x in -radius..=radius {
-        for y in -radius..=radius {
-            for z in -radius..=radius {
-                let chunk_pos =
-                    ChunkPos::new(player_chunk.x + x, player_chunk.y + y, player_chunk.z + z);
-
-                let distance_sq = x * x + y * y + z * z;
-                if distance_sq > radius * radius {
-                    continue;
-                }
-                if level.chunk(chunk_pos).is_some() || queue.pending.contains(&chunk_pos) {
-                    continue;
-                }
-
-                new_chunks.push(QueuedChunk {
-                    pos: chunk_pos,
-                    distance_sq,
-                });
-            }
-        }
-    }
-
-    // Sort chunks by vertical distance first, then by total distance
-    new_chunks.sort_by_key(|chunk| {
-        let dy = chunk.pos.y - player_chunk.y;
-        let dx = chunk.pos.x - player_chunk.x;
-        let dz = chunk.pos.z - player_chunk.z;
-        let below = dy <= 0;
-        let horizontal_dist = dx * dx + dz * dz; // Distance in xz plane
-        (
-            !below,            // Chunks below come first
-            horizontal_dist,   // Then prioritize chunks directly below player
-            dy.abs(),          // Then by vertical distance
-            chunk.distance_sq, // Finally by total distance
-        )
-    });
-
-    for chunk in new_chunks {
-        queue.pending.insert(chunk.pos);
-        queue.queue.push_back(chunk);
-    }
-}
-
 fn generate_chunk_batch(
     material: Res<GlobalVoxelMaterial>,
     db: Res<LevelDatabase>,
     runtime: Res<TokioTasksRuntime>,
     generator: Res<LevelGenerator>,
-    mut queue: ResMut<ChunkGenerationQueue>,
     mut task_status: ResMut<ChunkGenerationTask>,
 ) {
-    if task_status.in_progress {
+    if task_status.running {
         return;
     }
 
-    const CHUNKS_PER_FRAME: usize = 4;
-
-    let mut chunks_to_generate = Vec::new();
-    for _ in 0..CHUNKS_PER_FRAME {
-        if let Some(queued_chunk) = queue.queue.pop_front() {
-            chunks_to_generate.push(queued_chunk.pos);
-        } else {
-            break;
-        }
-    }
-
-    if chunks_to_generate.is_empty() {
-        return;
-    }
-
-    let db = db.0.clone();
+    task_status.running = true;
     let material = material.0.clone();
+    let db = db.0.clone();
     let mut generator = generator.clone();
 
-    task_status.in_progress = true;
-
     runtime.spawn_background_task(|mut ctx| async move {
-        for chunk_pos in chunks_to_generate {
+        loop {
+            // Get the highest priority chunk to generate
+            let chunk_pos = ctx
+                .run_on_main_thread(|ctx| {
+                    let mut player_query = ctx.world.query::<&Transform>();
+
+                    let level = ctx.world.resource::<Level>();
+                    let queue = ctx.world.resource::<ChunkGenerationQueue>();
+
+                    // Get player position
+                    let player_transform = player_query.iter(ctx.world).next()?;
+                    let player_pos = player_transform.translation;
+                    let player_chunk = BlockPos::from_world(player_pos).chunk_pos();
+
+                    // Find closest non-generated chunk within radius
+                    let radius = 12;
+                    let mut best_chunk = None;
+                    let mut best_priority = None;
+
+                    for x in -radius..=radius {
+                        for y in -radius..=radius {
+                            for z in -radius..=radius {
+                                let pos = ChunkPos::new(
+                                    player_chunk.x + x,
+                                    player_chunk.y + y,
+                                    player_chunk.z + z,
+                                );
+
+                                let distance_sq = x * x + y * y + z * z;
+                                if distance_sq > radius * radius {
+                                    continue;
+                                }
+
+                                if level.chunk(pos).is_some() || queue.pending.contains(&pos) {
+                                    continue;
+                                }
+
+                                let dy = y;
+                                let below = dy <= 0;
+                                let horizontal_dist = x * x + z * z;
+
+                                let priority = (!below, horizontal_dist, dy.abs(), distance_sq);
+
+                                if best_priority.is_none_or(|p| priority < p) {
+                                    best_priority = Some(priority);
+                                    best_chunk = Some(pos);
+                                }
+                            }
+                        }
+                    }
+
+                    best_chunk
+                })
+                .await;
+
+            let Some(chunk_pos) = chunk_pos else {
+                // No chunks need generation, sleep briefly and check again
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                continue;
+            };
+
+            // Mark chunk as pending
+            ctx.run_on_main_thread(move |ctx| {
+                ctx.world
+                    .resource_mut::<ChunkGenerationQueue>()
+                    .pending
+                    .insert(chunk_pos);
+            })
+            .await;
+
+            // Generate the chunk
             let chunk = match sqlx::query!(
                 "SELECT data FROM chunks WHERE x = ? AND y = ? AND z = ?",
                 chunk_pos.x,
@@ -300,7 +286,6 @@ fn generate_chunk_batch(
                 Some(row) => bincode::deserialize(&row.data).unwrap(),
                 None => {
                     let chunk = generator.generate_chunk(chunk_pos);
-
                     let data = bincode::serialize(&chunk).unwrap();
                     sqlx::query!(
                         "INSERT INTO chunks (x, y, z, data) VALUES (?, ?, ?, ?)",
@@ -312,13 +297,13 @@ fn generate_chunk_batch(
                     .execute(&db)
                     .await
                     .unwrap();
-
                     chunk
                 }
             };
 
             let material = material.clone();
 
+            // Add the chunk to the world
             ctx.run_on_main_thread(move |ctx| {
                 let entity = ctx
                     .world
@@ -346,12 +331,6 @@ fn generate_chunk_batch(
             })
             .await;
         }
-
-        // Mark task as complete
-        ctx.run_on_main_thread(|ctx| {
-            ctx.world.resource_mut::<ChunkGenerationTask>().in_progress = false;
-        })
-        .await;
     });
 }
 
