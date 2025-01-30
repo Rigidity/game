@@ -79,10 +79,15 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Apply AO darkening with more subtle transitions
     let ao_factor = mix(0.3, 1.0, in.ao);
     let texture_sample = textureSample(array_texture, array_texture_sampler, in.uv, i32(in.tex_index));
     
-    // Use all 4 components (including alpha) from the texture
-    return vec4<f32>(texture_sample.xyz * ao_factor, texture_sample.w);
+    // Discard fully transparent pixels
+    if (texture_sample.a <= 0.1) {
+        discard;
+    }
+    
+    // For semi-transparent pixels (like leaves), use a higher alpha threshold
+    let alpha = select(texture_sample.a, 0.8, texture_sample.a < 0.9);
+    return vec4<f32>(texture_sample.rgb * ao_factor, alpha);
 }

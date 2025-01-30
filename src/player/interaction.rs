@@ -54,13 +54,13 @@ pub fn update_focused_block(
     let block_pos = BlockPos::from_world(hit_pos);
     let air_pos = BlockPos::from_world(hit_pos + hit_normal);
 
-    if level.block(block_pos).is_solid() {
+    if level.block(block_pos) != Block::Air {
         focused_block.block_pos = Some(block_pos);
     } else {
         focused_block.block_pos = None;
     }
 
-    if !level.block(air_pos).is_solid() {
+    if level.block(air_pos) == Block::Air {
         focused_block.air_pos = Some(air_pos);
     } else {
         focused_block.air_pos = None;
@@ -118,7 +118,7 @@ pub fn break_or_place_block(
     if is_breaking {
         chunk.set(local_pos, Block::Air);
     } else {
-        chunk.set(local_pos, Block::Rock);
+        chunk.set(local_pos, Block::Leaves);
     }
 
     if let Some(entity) = level.entity(chunk_pos) {
@@ -162,7 +162,7 @@ fn raycast_blocks(
     for _ in 0..((max_distance / step) as i32) {
         let block_pos = current_pos.floor();
 
-        if level.block(BlockPos::from_world(block_pos)).is_solid() {
+        if level.block(BlockPos::from_world(block_pos)) != Block::Air {
             let block_center = block_pos + Vec3::splat(0.5);
             let block_aabb = Aabb::new(block_center, Vec3::ONE);
 
