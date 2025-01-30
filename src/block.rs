@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::level::Level;
 use crate::position::BlockPos;
 use crate::voxel_mesh::{VoxelFace, VoxelMesh};
@@ -26,7 +28,7 @@ impl BlockFaces {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Block {
     #[default]

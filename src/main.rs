@@ -1,4 +1,5 @@
 #![allow(clippy::too_many_arguments)]
+#![allow(clippy::type_complexity)]
 
 mod aabb;
 mod block;
@@ -12,6 +13,7 @@ mod position;
 mod voxel_mesh;
 
 use bevy::prelude::*;
+use bevy_tokio_tasks::TokioTasksPlugin;
 use level::LevelPlugin;
 use loader::LoaderPlugin;
 use physics::PhysicsPlugin;
@@ -21,6 +23,7 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins.set(ImagePlugin::default_nearest()),
+            TokioTasksPlugin::default(),
             LoaderPlugin,
             PlayerPlugin,
             LevelPlugin,

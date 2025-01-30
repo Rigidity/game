@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::{
     block::{Block, BlockFaces},
     level::Level,
@@ -5,7 +7,7 @@ use crate::{
     voxel_mesh::VoxelMesh,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Chunk {
     blocks: Vec<Block>,
 }

@@ -80,7 +80,6 @@ impl Material for VoxelMaterial {
 
 fn setup_global_voxel_material(
     mut commands: Commands,
-    mut next_state: ResMut<NextState<GameState>>,
     image_assets: Res<ImageAssets>,
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<VoxelMaterial>>,
@@ -99,8 +98,6 @@ fn setup_global_voxel_material(
     commands.insert_resource(GlobalVoxelMaterial(
         materials.add(VoxelMaterial { array_texture }),
     ));
-
-    next_state.set(GameState::Playing);
 }
 
 fn create_texture_array(

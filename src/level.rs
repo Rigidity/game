@@ -1,5 +1,7 @@
 use bevy::{prelude::*, utils::HashMap};
+use bevy_tokio_tasks::TokioTasksRuntime;
 use noise::{NoiseFn, Perlin};
+use sqlx::SqlitePool;
 
 use crate::{
     block::Block,
@@ -15,6 +17,7 @@ pub struct LevelPlugin;
 impl Plugin for LevelPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Level::new(42))
+            .add_systems(OnEnter(GameState::Setup), setup_level)
             .add_systems(OnEnter(GameState::Playing), generate_chunks)
             .add_systems(
                 Update,
@@ -27,6 +30,9 @@ struct LoadedChunk {
     chunk: Chunk,
     entity: Entity,
 }
+
+#[derive(Resource)]
+struct LevelDatabase(SqlitePool);
 
 #[derive(Resource)]
 pub struct Level {
@@ -62,6 +68,24 @@ impl Level {
             .unwrap_or(Block::Air)
     }
 
+    fn get_density_factor(&self, pos: &Vec3) -> f64 {
+        let large_scale = self.noise.get([
+            pos.x as f64 * 0.005,
+            pos.y as f64 * 0.005,
+            pos.z as f64 * 0.005,
+        ]);
+
+        large_scale * 0.6
+    }
+
+    fn get_terrain_density(&self, pos: &Vec3) -> f64 {
+        self.noise.get([
+            pos.x as f64 * 0.02,
+            pos.y as f64 * 0.02,
+            pos.z as f64 * 0.02,
+        ])
+    }
+
     fn generate_chunk(&mut self, chunk_pos: ChunkPos) -> Chunk {
         let mut chunk = Chunk::new();
 
@@ -71,23 +95,18 @@ impl Level {
                     let local_pos = LocalPos::new(x, y, z);
                     let pos = local_pos.block_pos(chunk_pos).world_pos();
 
-                    let density = self.noise.get([
-                        pos.x as f64 * 0.02,
-                        pos.y as f64 * 0.02,
-                        pos.z as f64 * 0.02,
-                    ]);
+                    let density_factor = self.get_density_factor(&pos);
+                    let terrain_density = self.get_terrain_density(&pos);
 
-                    if density > 0.0 {
+                    if terrain_density > density_factor {
                         // Check upwards until we find air to determine if we're near a surface
                         let distance_to_surface = (0..=5)
                             .find(|&d| {
                                 let check_pos =
                                     (local_pos.block_pos(chunk_pos) + BlockPos::Y * d).world_pos();
-                                self.noise.get([
-                                    check_pos.x as f64 * 0.02,
-                                    check_pos.y as f64 * 0.02,
-                                    check_pos.z as f64 * 0.02,
-                                ]) <= 0.0
+                                let check_density_factor = self.get_density_factor(&check_pos);
+                                let check_terrain_density = self.get_terrain_density(&check_pos);
+                                check_terrain_density <= check_density_factor
                             })
                             .unwrap_or(5);
 
@@ -111,6 +130,27 @@ impl Level {
 
 #[derive(Debug, Clone, Copy, Component)]
 pub struct Dirty;
+
+#[derive(Debug, Clone, Copy, Component)]
+pub struct Modified;
+
+fn setup_level(runtime: ResMut<TokioTasksRuntime>) {
+    runtime.spawn_background_task(|mut ctx| async move {
+        let pool = SqlitePool::connect("sqlite://./level.sqlite?mode=rwc")
+            .await
+            .unwrap();
+
+        sqlx::migrate!().run(&pool).await.unwrap();
+
+        ctx.run_on_main_thread(move |ctx| {
+            ctx.world.insert_resource(LevelDatabase(pool));
+            ctx.world
+                .resource_mut::<NextState<GameState>>()
+                .set(GameState::Playing);
+        })
+        .await;
+    });
+}
 
 fn generate_chunks(
     mut commands: Commands,
@@ -147,10 +187,13 @@ fn generate_chunks(
 fn build_chunk_meshes(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
+    runtime: Res<TokioTasksRuntime>,
+    db: Res<LevelDatabase>,
     level: Res<Level>,
-    query: Query<(Entity, &ChunkPos), With<Dirty>>,
+    dirty_query: Query<(Entity, &ChunkPos), With<Dirty>>,
+    modified_query: Query<(Entity, &ChunkPos), With<Modified>>,
 ) {
-    for (entity, &chunk_pos) in query.iter() {
+    for (entity, &chunk_pos) in dirty_query.iter().chain(modified_query.iter()) {
         let Some(chunk) = level.chunk(chunk_pos) else {
             continue;
         };
@@ -160,6 +203,25 @@ fn build_chunk_meshes(
         commands
             .entity(entity)
             .insert(Mesh3d(meshes.add(mesh)))
-            .remove::<Dirty>();
+            .remove::<Dirty>()
+            .remove::<Modified>();
+
+        let data = bincode::serialize(&chunk).unwrap();
+        let db = db.0.clone();
+
+        if modified_query.contains(entity) {
+            runtime.spawn_background_task(move |mut _ctx| async move {
+                sqlx::query!(
+                    "UPDATE chunks SET data = ? WHERE x = ? AND y = ? AND z = ?",
+                    data,
+                    chunk_pos.x,
+                    chunk_pos.y,
+                    chunk_pos.z
+                )
+                .execute(&db)
+                .await
+                .unwrap();
+            });
+        }
     }
 }
