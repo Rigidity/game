@@ -1,15 +1,19 @@
-use bevy::{prelude::*, utils::HashMap};
+use bevy::{prelude::*, utils::HashMap, utils::HashSet};
 use bevy_tokio_tasks::TokioTasksRuntime;
 use noise::{NoiseFn, Perlin};
 use sqlx::SqlitePool;
+use std::collections::VecDeque;
 
 use crate::{
     block::Block,
     chunk::Chunk,
     game_state::GameState,
     loader::GlobalVoxelMaterial,
+    player::Player,
     position::{BlockPos, ChunkPos, LocalPos, CHUNK_SIZE},
 };
+
+const CHUNK_UNLOAD_DISTANCE: i32 = 16; // Should be larger than generation radius
 
 #[derive(Debug, Clone, Copy)]
 pub struct LevelPlugin;
@@ -18,11 +22,18 @@ impl Plugin for LevelPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Level::new())
             .insert_resource(LevelGenerator::new(42))
+            .insert_resource(ChunkGenerationQueue::default())
             .add_systems(OnEnter(GameState::Setup), setup_level)
-            .add_systems(OnEnter(GameState::Playing), generate_chunks)
             .add_systems(
                 Update,
-                build_chunk_meshes.run_if(in_state(GameState::Playing)),
+                (
+                    queue_chunks_around_player,
+                    generate_chunk_batch,
+                    build_chunk_meshes,
+                    unload_distant_chunks,
+                )
+                    .chain()
+                    .run_if(in_state(GameState::Playing)),
             );
     }
 }
@@ -147,6 +158,18 @@ pub struct Dirty;
 #[derive(Debug, Clone, Copy, Component)]
 pub struct Modified;
 
+#[derive(Debug)]
+struct QueuedChunk {
+    pos: ChunkPos,
+    distance_sq: i32,
+}
+
+#[derive(Debug, Default, Resource)]
+struct ChunkGenerationQueue {
+    pending: HashSet<ChunkPos>,
+    queue: VecDeque<QueuedChunk>,
+}
+
 fn setup_level(runtime: ResMut<TokioTasksRuntime>) {
     runtime.spawn_background_task(|mut ctx| async move {
         let pool = SqlitePool::connect("sqlite://./level.sqlite?mode=rwc")
@@ -165,80 +188,137 @@ fn setup_level(runtime: ResMut<TokioTasksRuntime>) {
     });
 }
 
-fn generate_chunks(
+fn queue_chunks_around_player(
+    mut queue: ResMut<ChunkGenerationQueue>,
+    level: Res<Level>,
+    player_query: Query<&Transform, With<Player>>,
+) {
+    let Ok(player_transform) = player_query.get_single() else {
+        return;
+    };
+
+    let player_pos = player_transform.translation;
+    let player_chunk = BlockPos::from_world(player_pos).chunk_pos();
+    let radius = 12;
+
+    let mut new_chunks = Vec::new();
+
+    for x in -radius..=radius {
+        for y in -radius..=radius {
+            for z in -radius..=radius {
+                let chunk_pos =
+                    ChunkPos::new(player_chunk.x + x, player_chunk.y + y, player_chunk.z + z);
+
+                let distance_sq = x * x + y * y + z * z;
+                if distance_sq > radius * radius {
+                    continue;
+                }
+                if level.chunk(chunk_pos).is_some() || queue.pending.contains(&chunk_pos) {
+                    continue;
+                }
+
+                new_chunks.push(QueuedChunk {
+                    pos: chunk_pos,
+                    distance_sq,
+                });
+            }
+        }
+    }
+
+    new_chunks.sort_by_key(|chunk| chunk.distance_sq);
+
+    for chunk in new_chunks {
+        queue.pending.insert(chunk.pos);
+        queue.queue.push_back(chunk);
+    }
+}
+
+fn generate_chunk_batch(
     material: Res<GlobalVoxelMaterial>,
     db: Res<LevelDatabase>,
     runtime: Res<TokioTasksRuntime>,
     generator: Res<LevelGenerator>,
+    mut queue: ResMut<ChunkGenerationQueue>,
 ) {
+    const CHUNKS_PER_FRAME: usize = 4;
+
+    let mut chunks_to_generate = Vec::new();
+    for _ in 0..CHUNKS_PER_FRAME {
+        if let Some(queued_chunk) = queue.queue.pop_front() {
+            chunks_to_generate.push(queued_chunk.pos);
+        } else {
+            break;
+        }
+    }
+
+    if chunks_to_generate.is_empty() {
+        return;
+    }
+
     let db = db.0.clone();
     let material = material.0.clone();
     let mut generator = generator.clone();
 
     runtime.spawn_background_task(|mut ctx| async move {
-        for chunk_x in 0..16 {
-            for chunk_y in 0..16 {
-                for chunk_z in 0..16 {
-                    let chunk_pos = ChunkPos::new(chunk_x, chunk_y, chunk_z);
+        for chunk_pos in chunks_to_generate {
+            let chunk = match sqlx::query!(
+                "SELECT data FROM chunks WHERE x = ? AND y = ? AND z = ?",
+                chunk_pos.x,
+                chunk_pos.y,
+                chunk_pos.z
+            )
+            .fetch_optional(&db)
+            .await
+            .unwrap()
+            {
+                Some(row) => bincode::deserialize(&row.data).unwrap(),
+                None => {
+                    let chunk = generator.generate_chunk(chunk_pos);
 
-                    // Try to load from database first
-                    let chunk = match sqlx::query!(
-                        "SELECT data FROM chunks WHERE x = ? AND y = ? AND z = ?",
+                    let data = bincode::serialize(&chunk).unwrap();
+                    sqlx::query!(
+                        "INSERT INTO chunks (x, y, z, data) VALUES (?, ?, ?, ?)",
                         chunk_pos.x,
                         chunk_pos.y,
-                        chunk_pos.z
+                        chunk_pos.z,
+                        data
                     )
-                    .fetch_optional(&db)
+                    .execute(&db)
                     .await
-                    .unwrap()
-                    {
-                        Some(row) => bincode::deserialize(&row.data).unwrap(),
-                        None => {
-                            // If not in database, generate and save
-                            let chunk = generator.generate_chunk(chunk_pos);
+                    .unwrap();
 
-                            let data = bincode::serialize(&chunk).unwrap();
-                            sqlx::query!(
-                                "INSERT INTO chunks (x, y, z, data) VALUES (?, ?, ?, ?)",
-                                chunk_pos.x,
-                                chunk_pos.y,
-                                chunk_pos.z,
-                                data
-                            )
-                            .execute(&db)
-                            .await
-                            .unwrap();
-
-                            chunk
-                        }
-                    };
-
-                    let material = material.clone();
-
-                    ctx.run_on_main_thread(move |ctx| {
-                        let entity = ctx
-                            .world
-                            .commands()
-                            .spawn((
-                                chunk_pos,
-                                Dirty,
-                                MeshMaterial3d(material),
-                                Transform::from_xyz(
-                                    chunk_pos.x as f32 * 16.0,
-                                    chunk_pos.y as f32 * 16.0,
-                                    chunk_pos.z as f32 * 16.0,
-                                ),
-                            ))
-                            .id();
-
-                        ctx.world
-                            .resource_mut::<Level>()
-                            .chunks
-                            .insert(chunk_pos, LoadedChunk { chunk, entity });
-                    })
-                    .await;
+                    chunk
                 }
-            }
+            };
+
+            let material = material.clone();
+
+            ctx.run_on_main_thread(move |ctx| {
+                let entity = ctx
+                    .world
+                    .spawn((
+                        chunk_pos,
+                        Dirty,
+                        MeshMaterial3d(material),
+                        Transform::from_xyz(
+                            chunk_pos.x as f32 * 16.0,
+                            chunk_pos.y as f32 * 16.0,
+                            chunk_pos.z as f32 * 16.0,
+                        ),
+                    ))
+                    .id();
+
+                ctx.world
+                    .resource_mut::<Level>()
+                    .chunks
+                    .insert(chunk_pos, LoadedChunk { chunk, entity });
+
+                ctx.world
+                    .resource_mut::<ChunkGenerationQueue>()
+                    .pending
+                    .remove(&chunk_pos);
+            })
+            .await;
         }
     });
 }
@@ -281,6 +361,60 @@ fn build_chunk_meshes(
                 .await
                 .unwrap();
             });
+        }
+    }
+}
+
+fn unload_distant_chunks(
+    mut commands: Commands,
+    mut level: ResMut<Level>,
+    player_query: Query<&Transform, With<Player>>,
+    runtime: Res<TokioTasksRuntime>,
+    db: Res<LevelDatabase>,
+) {
+    let Ok(player_transform) = player_query.get_single() else {
+        return;
+    };
+
+    let player_pos = player_transform.translation;
+    let player_chunk = BlockPos::from_world(player_pos).chunk_pos();
+    let unload_distance_sq = CHUNK_UNLOAD_DISTANCE * CHUNK_UNLOAD_DISTANCE;
+
+    // Collect chunks to unload
+    let chunks_to_unload: Vec<_> = level
+        .chunks
+        .iter()
+        .filter(|(&chunk_pos, _)| {
+            let dx = chunk_pos.x - player_chunk.x;
+            let dy = chunk_pos.y - player_chunk.y;
+            let dz = chunk_pos.z - player_chunk.z;
+            dx * dx + dy * dy + dz * dz > unload_distance_sq
+        })
+        .map(|(&pos, loaded)| (pos, loaded.entity))
+        .collect();
+
+    // Unload chunks
+    for (chunk_pos, entity) in chunks_to_unload {
+        if let Some(loaded_chunk) = level.chunks.remove(&chunk_pos) {
+            // Save chunk data before unloading
+            let data = bincode::serialize(&loaded_chunk.chunk).unwrap();
+            let db = db.0.clone();
+
+            runtime.spawn_background_task(move |_ctx| async move {
+                sqlx::query!(
+                    "UPDATE chunks SET data = ? WHERE x = ? AND y = ? AND z = ?",
+                    data,
+                    chunk_pos.x,
+                    chunk_pos.y,
+                    chunk_pos.z
+                )
+                .execute(&db)
+                .await
+                .unwrap();
+            });
+
+            // Despawn the chunk entity
+            commands.entity(entity).despawn();
         }
     }
 }
