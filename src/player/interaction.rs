@@ -30,7 +30,9 @@ pub fn update_focused_block(
     camera_query: Query<(&Transform, &Parent), With<PlayerCamera>>,
     player_query: Query<&Transform, With<Player>>,
 ) {
-    let window = primary_window.single();
+    let Ok(window) = primary_window.get_single() else {
+        return;
+    };
 
     if window.cursor_options.grab_mode == CursorGrabMode::None {
         return;
@@ -76,7 +78,10 @@ pub fn break_or_place_block(
 ) {
     timer.0.tick(time.delta());
 
-    let window = primary_window.single();
+    let Ok(window) = primary_window.get_single() else {
+        return;
+    };
+
     if window.cursor_options.grab_mode == CursorGrabMode::None {
         return;
     }

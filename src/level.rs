@@ -13,6 +13,7 @@ use crate::{
 };
 
 const CHUNK_UNLOAD_DISTANCE: i32 = 16; // Should be larger than generation radius
+const CHUNK_GENERATION_BATCH_SIZE: usize = 8; // Adjust this value as needed
 
 #[derive(Debug, Clone, Copy)]
 pub struct LevelPlugin;
@@ -203,23 +204,27 @@ fn generate_chunk_batch(
 
     runtime.spawn_background_task(|mut ctx| async move {
         loop {
-            // Get the highest priority chunk to generate
-            let chunk_pos = ctx
+            let chunk_positions = ctx
                 .run_on_main_thread(|ctx| {
-                    let mut player_query = ctx.world.query::<&Transform>();
-
+                    let mut player_query = ctx.world.query_filtered::<&Transform, With<Player>>();
                     let level = ctx.world.resource::<Level>();
                     let queue = ctx.world.resource::<ChunkGenerationQueue>();
 
-                    // Get player position
-                    let player_transform = player_query.iter(ctx.world).next()?;
+                    // Get player position - if no player, stop generating
+                    let player_transform = match player_query.iter(ctx.world).next() {
+                        Some(transform) => transform,
+                        None => {
+                            ctx.world.resource_mut::<ChunkGenerationTask>().running = false;
+                            return Vec::new();
+                        }
+                    };
+
                     let player_pos = player_transform.translation;
                     let player_chunk = BlockPos::from_world(player_pos).chunk_pos();
 
-                    // Find closest non-generated chunk within radius
+                    // Find closest non-generated chunks within radius
                     let radius = 12;
-                    let mut best_chunk = None;
-                    let mut best_priority = None;
+                    let mut chunks = Vec::new();
 
                     for x in -radius..=radius {
                         for y in -radius..=radius {
@@ -230,8 +235,14 @@ fn generate_chunk_batch(
                                     player_chunk.z + z,
                                 );
 
-                                let distance_sq = x * x + y * y + z * z;
-                                if distance_sq > radius * radius {
+                                // Calculate actual world-space distance from player
+                                let dx = (pos.x as f32 * 16.0) - player_pos.x;
+                                let dy = (pos.y as f32 * 16.0) - player_pos.y;
+                                let dz = (pos.z as f32 * 16.0) - player_pos.z;
+                                let distance_sq = (dx * dx + dy * dy + dz * dz) as i32;
+
+                                if distance_sq > radius * radius * 256 {
+                                    // Adjust radius for chunk size
                                     continue;
                                 }
 
@@ -239,95 +250,116 @@ fn generate_chunk_batch(
                                     continue;
                                 }
 
-                                let dy = y;
-                                let below = dy <= 0;
-                                let horizontal_dist = x * x + z * z;
-
-                                let priority = (!below, horizontal_dist, dy.abs(), distance_sq);
-
-                                if best_priority.is_none_or(|p| priority < p) {
-                                    best_priority = Some(priority);
-                                    best_chunk = Some(pos);
-                                }
+                                chunks.push((distance_sq, pos));
                             }
                         }
                     }
 
-                    best_chunk
+                    // Sort by distance and take the closest N chunks
+                    chunks.sort_by_key(|&(dist, _)| dist);
+                    chunks.truncate(CHUNK_GENERATION_BATCH_SIZE);
+                    chunks.into_iter().map(|(_, pos)| pos).collect()
                 })
                 .await;
 
-            let Some(chunk_pos) = chunk_pos else {
+            if chunk_positions.is_empty() {
                 // No chunks need generation, sleep briefly and check again
+                // Only stop the task if there are no pending chunks
+                if ctx
+                    .run_on_main_thread(|ctx| {
+                        if ctx
+                            .world
+                            .resource::<ChunkGenerationQueue>()
+                            .pending
+                            .is_empty()
+                        {
+                            ctx.world.resource_mut::<ChunkGenerationTask>().running = false;
+                            true
+                        } else {
+                            false
+                        }
+                    })
+                    .await
+                {
+                    break;
+                }
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 continue;
-            };
+            }
 
-            // Mark chunk as pending
+            // Mark chunks as pending
+            let chunk_positions_2 = chunk_positions.clone();
             ctx.run_on_main_thread(move |ctx| {
-                ctx.world
-                    .resource_mut::<ChunkGenerationQueue>()
-                    .pending
-                    .insert(chunk_pos);
+                let mut queue = ctx.world.resource_mut::<ChunkGenerationQueue>();
+                for &pos in &chunk_positions_2 {
+                    queue.pending.insert(pos);
+                }
             })
             .await;
 
-            // Generate the chunk
-            let chunk = match sqlx::query!(
-                "SELECT data FROM chunks WHERE x = ? AND y = ? AND z = ?",
-                chunk_pos.x,
-                chunk_pos.y,
-                chunk_pos.z
-            )
-            .fetch_optional(&db)
-            .await
-            .unwrap()
-            {
-                Some(row) => bincode::deserialize(&row.data).unwrap(),
-                None => {
-                    let chunk = generator.generate_chunk(chunk_pos);
-                    let data = bincode::serialize(&chunk).unwrap();
-                    sqlx::query!(
-                        "INSERT INTO chunks (x, y, z, data) VALUES (?, ?, ?, ?)",
-                        chunk_pos.x,
-                        chunk_pos.y,
-                        chunk_pos.z,
-                        data
-                    )
-                    .execute(&db)
-                    .await
-                    .unwrap();
-                    chunk
-                }
-            };
+            // Generate chunks in parallel
+            let mut chunks = Vec::new();
+            for &chunk_pos in &chunk_positions {
+                // Generate the chunk
+                let chunk = match sqlx::query!(
+                    "SELECT data FROM chunks WHERE x = ? AND y = ? AND z = ?",
+                    chunk_pos.x,
+                    chunk_pos.y,
+                    chunk_pos.z
+                )
+                .fetch_optional(&db)
+                .await
+                .unwrap()
+                {
+                    Some(row) => bincode::deserialize(&row.data).unwrap(),
+                    None => {
+                        let chunk = generator.generate_chunk(chunk_pos);
+                        let data = bincode::serialize(&chunk).unwrap();
+                        sqlx::query!(
+                            "INSERT INTO chunks (x, y, z, data) VALUES (?, ?, ?, ?)",
+                            chunk_pos.x,
+                            chunk_pos.y,
+                            chunk_pos.z,
+                            data
+                        )
+                        .execute(&db)
+                        .await
+                        .unwrap();
+                        chunk
+                    }
+                };
+                chunks.push((chunk_pos, chunk));
+            }
 
             let material = material.clone();
 
-            // Add the chunk to the world
+            // Add the chunks to the world
             ctx.run_on_main_thread(move |ctx| {
-                let entity = ctx
-                    .world
-                    .spawn((
-                        chunk_pos,
-                        Dirty,
-                        MeshMaterial3d(material),
-                        Transform::from_xyz(
-                            chunk_pos.x as f32 * 16.0,
-                            chunk_pos.y as f32 * 16.0,
-                            chunk_pos.z as f32 * 16.0,
-                        ),
-                    ))
-                    .id();
+                for (chunk_pos, chunk) in chunks {
+                    let entity = ctx
+                        .world
+                        .spawn((
+                            chunk_pos,
+                            Dirty,
+                            MeshMaterial3d(material.clone()),
+                            Transform::from_xyz(
+                                chunk_pos.x as f32 * 16.0,
+                                chunk_pos.y as f32 * 16.0,
+                                chunk_pos.z as f32 * 16.0,
+                            ),
+                        ))
+                        .id();
 
-                ctx.world
-                    .resource_mut::<Level>()
-                    .chunks
-                    .insert(chunk_pos, LoadedChunk { chunk, entity });
+                    ctx.world
+                        .resource_mut::<Level>()
+                        .chunks
+                        .insert(chunk_pos, LoadedChunk { chunk, entity });
 
-                ctx.world
-                    .resource_mut::<ChunkGenerationQueue>()
-                    .pending
-                    .remove(&chunk_pos);
+                    ctx.world
+                        .resource_mut::<ChunkGenerationQueue>()
+                        .pending
+                        .remove(&chunk_pos);
+                }
             })
             .await;
         }
