@@ -23,6 +23,7 @@ impl Plugin for LevelPlugin {
         app.insert_resource(Level::new())
             .insert_resource(LevelGenerator::new(42))
             .insert_resource(ChunkGenerationQueue::default())
+            .insert_resource(ChunkGenerationTask::default())
             .add_systems(OnEnter(GameState::Setup), setup_level)
             .add_systems(
                 Update,
@@ -170,6 +171,11 @@ struct ChunkGenerationQueue {
     queue: VecDeque<QueuedChunk>,
 }
 
+#[derive(Debug, Default, Resource)]
+struct ChunkGenerationTask {
+    in_progress: bool,
+}
+
 fn setup_level(runtime: ResMut<TokioTasksRuntime>) {
     runtime.spawn_background_task(|mut ctx| async move {
         let pool = SqlitePool::connect("sqlite://./level.sqlite?mode=rwc")
@@ -225,7 +231,20 @@ fn queue_chunks_around_player(
         }
     }
 
-    new_chunks.sort_by_key(|chunk| chunk.distance_sq);
+    // Sort chunks by vertical distance first, then by total distance
+    new_chunks.sort_by_key(|chunk| {
+        let dy = chunk.pos.y - player_chunk.y;
+        let dx = chunk.pos.x - player_chunk.x;
+        let dz = chunk.pos.z - player_chunk.z;
+        let below = dy <= 0;
+        let horizontal_dist = dx * dx + dz * dz; // Distance in xz plane
+        (
+            !below,            // Chunks below come first
+            horizontal_dist,   // Then prioritize chunks directly below player
+            dy.abs(),          // Then by vertical distance
+            chunk.distance_sq, // Finally by total distance
+        )
+    });
 
     for chunk in new_chunks {
         queue.pending.insert(chunk.pos);
@@ -239,7 +258,12 @@ fn generate_chunk_batch(
     runtime: Res<TokioTasksRuntime>,
     generator: Res<LevelGenerator>,
     mut queue: ResMut<ChunkGenerationQueue>,
+    mut task_status: ResMut<ChunkGenerationTask>,
 ) {
+    if task_status.in_progress {
+        return;
+    }
+
     const CHUNKS_PER_FRAME: usize = 4;
 
     let mut chunks_to_generate = Vec::new();
@@ -258,6 +282,8 @@ fn generate_chunk_batch(
     let db = db.0.clone();
     let material = material.0.clone();
     let mut generator = generator.clone();
+
+    task_status.in_progress = true;
 
     runtime.spawn_background_task(|mut ctx| async move {
         for chunk_pos in chunks_to_generate {
@@ -320,6 +346,12 @@ fn generate_chunk_batch(
             })
             .await;
         }
+
+        // Mark task as complete
+        ctx.run_on_main_thread(|ctx| {
+            ctx.world.resource_mut::<ChunkGenerationTask>().in_progress = false;
+        })
+        .await;
     });
 }
 
