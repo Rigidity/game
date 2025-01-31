@@ -20,7 +20,7 @@ use crate::{
 const CHUNK_UNLOAD_DISTANCE: i32 = 16; // Should be larger than generation radius
 const CHUNK_GENERATION_BATCH_SIZE: usize = 8; // Adjust this value as needed
 const TREE_HEIGHT: i32 = 12; // Tall but not gigantic
-const TREE_RADIUS: i32 = 3; // Reasonable canopy size
+const TREE_RADIUS: i32 = 5; // Reasonable canopy size
 const HOUSE_SIZE: i32 = 5;
 const STRUCTURE_ATTEMPT_SPACING: i32 = 8; // Increased structure density
 
@@ -154,7 +154,7 @@ impl LevelGenerator {
         // Generate single-block trunk
         for y in 0..height {
             let pos = base_world_pos + BlockPos::new(0, y, 0);
-            self.set_block_world(chunks, pos, Block::Dirt); // Dirt trunk
+            self.set_block_world(chunks, pos, Block::Wood);
         }
 
         // Generate Minecraft-style leaf arrangement
@@ -187,9 +187,9 @@ impl LevelGenerator {
         }
 
         // Add a few random extra leaves for variety
-        for _ in 0..3 {
-            let x = rng.random_range(-2..=2);
-            let z = rng.random_range(-2..=2);
+        for _ in 0..5 {
+            let x = rng.random_range(-3..=3);
+            let z = rng.random_range(-3..=3);
             let y = rng.random_range(leaf_start..leaf_start + leaf_height);
 
             if x != 0 || z != 0 {

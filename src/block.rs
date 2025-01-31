@@ -37,6 +37,7 @@ pub enum Block {
     Dirt,
     Grass,
     Leaves,
+    Wood,
 }
 
 impl Block {
@@ -73,6 +74,8 @@ impl Block {
                         (Self::Grass, VoxelFace::Bottom) => 1,
                         (Self::Grass, _) => 2,
                         (Self::Leaves, _) => 4,
+                        (Self::Wood, VoxelFace::Top | VoxelFace::Bottom) => 6,
+                        (Self::Wood, _) => 5,
                     },
                 );
             }

@@ -43,6 +43,10 @@ pub struct ImageAssets {
     pub grass: Handle<Image>,
     #[asset(path = "Voxels/Leaves.png")]
     pub leaves: Handle<Image>,
+    #[asset(path = "Voxels/Wood.png")]
+    pub wood: Handle<Image>,
+    #[asset(path = "Voxels/WoodSide.png")]
+    pub wood_side: Handle<Image>,
 }
 
 #[derive(Debug, Clone, Resource)]
@@ -109,6 +113,8 @@ fn setup_global_voxel_material(
             image_assets.grass_side.clone(),
             image_assets.grass.clone(),
             image_assets.leaves.clone(),
+            image_assets.wood_side.clone(),
+            image_assets.wood.clone(),
         ],
         &mut images,
     )
