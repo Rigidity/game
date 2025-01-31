@@ -1,7 +1,19 @@
-#import bevy_pbr::mesh_functions::{get_world_from_local, mesh_position_local_to_clip}
+#import bevy_pbr::{
+    mesh_functions::{get_world_from_local, mesh_position_local_to_clip},
+    mesh_view_bindings::globals
+}
+
+struct BlockInteraction {
+    x: u32,
+    y: u32,
+    z: u32,
+    face: u32,
+    value: u32,
+}
 
 @group(2) @binding(0) var array_texture: texture_2d_array<f32>;
 @group(2) @binding(1) var array_texture_sampler: sampler;
+@group(2) @binding(2) var<uniform> block_interaction: BlockInteraction;
 
 struct Vertex {
     @builtin(instance_index) instance_index: u32,
@@ -14,13 +26,17 @@ struct VertexOutput {
     @location(1) uv: vec2<f32>,
     @location(2) tex_index: u32,
     @location(3) ao: f32,
+    @location(4) interaction: u32,
 }
 
 @vertex
 fn vertex(vertex: Vertex) -> VertexOutput {
-    let x = f32((vertex.packed >> 28) & 0xF);
-    let y = f32((vertex.packed >> 24) & 0xF);
-    let z = f32((vertex.packed >> 20) & 0xF);
+    let x_int = (vertex.packed >> 28) & 0xF;
+    let y_int = (vertex.packed >> 24) & 0xF;
+    let z_int = (vertex.packed >> 20) & 0xF;
+    let x = f32(x_int);
+    let y = f32(y_int);
+    let z = f32(z_int);
     let corner = (vertex.packed >> 18) & 0x3;
     let face = (vertex.packed >> 15) & 0x7;
     let ao = f32((vertex.packed >> 13) & 0x3) / 3.0;  // Unpack AO from bits 13-14
@@ -74,6 +90,16 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     out.uv = uv;
     out.tex_index = tex_index;
     out.ao = ao;
+
+    out.interaction = select(
+        0u,
+        block_interaction.value,
+        block_interaction.x == x_int
+            && block_interaction.y == y_int
+            && block_interaction.z == z_int
+            && block_interaction.face == face
+    );
+
     return out;
 }
 
@@ -89,5 +115,10 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     
     // For semi-transparent pixels (like leaves), use a higher alpha threshold
     let alpha = select(texture_sample.a, 0.8, texture_sample.a < 0.9);
-    return vec4<f32>(texture_sample.rgb * ao_factor, alpha);
+
+    // Create a slower, more obvious pulsating effect
+    let pulse = (sin(globals.time * 3.0) * 0.1) + 0.7;
+    let interaction_factor = select(pulse, 1.0, in.interaction == 0u);
+
+    return vec4<f32>(texture_sample.rgb * ao_factor * interaction_factor, alpha);
 }

@@ -7,7 +7,9 @@ use crate::{
     aabb::Aabb,
     block::Block,
     level::{Level, Modified},
+    loader::VoxelMaterial,
     position::{BlockPos, ChunkPos, CHUNK_SIZE},
+    voxel_mesh::VoxelFace,
 };
 
 use super::{Player, PlayerCamera};
@@ -18,6 +20,7 @@ const MAX_REACH: f32 = 5.0;
 pub struct FocusedBlock {
     pub block_pos: Option<BlockPos>,
     pub air_pos: Option<BlockPos>,
+    pub face: Option<VoxelFace>,
 }
 
 #[derive(Debug, Default, Clone, Resource)]
@@ -29,6 +32,8 @@ pub fn update_focused_block(
     primary_window: Query<&Window, With<PrimaryWindow>>,
     camera_query: Query<(&Transform, &Parent), With<PlayerCamera>>,
     player_query: Query<&Transform, With<Player>>,
+    chunk_query: Query<(&ChunkPos, &MeshMaterial3d<VoxelMaterial>)>,
+    mut materials: ResMut<Assets<VoxelMaterial>>,
 ) {
     let Ok(window) = primary_window.get_single() else {
         return;
@@ -48,8 +53,43 @@ pub fn update_focused_block(
     else {
         focused_block.block_pos = None;
         focused_block.air_pos = None;
+        focused_block.face = None;
+
+        for (_, material) in chunk_query.iter() {
+            if !materials
+                .get(&material.0)
+                .unwrap()
+                .block_interaction
+                .is_set()
+            {
+                continue;
+            }
+
+            materials
+                .get_mut(&material.0)
+                .unwrap()
+                .block_interaction
+                .unset();
+        }
+
         return;
     };
+
+    let face = if hit_normal.x < 0.0 {
+        VoxelFace::Left
+    } else if hit_normal.x > 0.0 {
+        VoxelFace::Right
+    } else if hit_normal.y < 0.0 {
+        VoxelFace::Bottom
+    } else if hit_normal.y > 0.0 {
+        VoxelFace::Top
+    } else if hit_normal.z < 0.0 {
+        VoxelFace::Back
+    } else {
+        VoxelFace::Front
+    };
+
+    focused_block.face = Some(face);
 
     let block_pos = BlockPos::from_world(hit_pos);
     let air_pos = BlockPos::from_world(hit_pos + hit_normal);
@@ -64,6 +104,29 @@ pub fn update_focused_block(
         focused_block.air_pos = Some(air_pos);
     } else {
         focused_block.air_pos = None;
+    }
+
+    let hit_chunk_pos = block_pos.chunk_pos();
+    let local_pos = block_pos.local_pos();
+
+    for (&chunk_pos, material) in chunk_query.iter() {
+        if chunk_pos != hit_chunk_pos
+            && !materials
+                .get(&material.0)
+                .unwrap()
+                .block_interaction
+                .is_set()
+        {
+            continue;
+        }
+
+        let material = materials.get_mut(&material.0).unwrap();
+
+        if chunk_pos == hit_chunk_pos && focused_block.block_pos.is_some() {
+            material.block_interaction.set(local_pos, face);
+        } else {
+            material.block_interaction.unset();
+        }
     }
 }
 

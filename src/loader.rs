@@ -6,14 +6,18 @@ use bevy::{
     render::{
         mesh::MeshVertexBufferLayoutRef,
         render_resource::{
-            AsBindGroup, Extent3d, RenderPipelineDescriptor, ShaderRef,
+            AsBindGroup, Extent3d, RenderPipelineDescriptor, ShaderRef, ShaderType,
             SpecializedMeshPipelineError, TextureDimension, TextureFormat,
         },
     },
 };
 use bevy_asset_loader::prelude::*;
 
-use crate::{game_state::GameState, voxel_mesh::VoxelMesh};
+use crate::{
+    game_state::GameState,
+    position::LocalPos,
+    voxel_mesh::{VoxelFace, VoxelMesh},
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct LoaderPlugin;
@@ -27,7 +31,7 @@ impl Plugin for LoaderPlugin {
                     .continue_to_state(GameState::Setup)
                     .load_collection::<ImageAssets>(),
             )
-            .add_systems(OnEnter(GameState::Setup), setup_global_voxel_material);
+            .add_systems(OnEnter(GameState::Setup), setup_global_texture_array);
     }
 }
 
@@ -50,13 +54,42 @@ pub struct ImageAssets {
 }
 
 #[derive(Debug, Clone, Resource)]
-pub struct GlobalVoxelMaterial(pub Handle<VoxelMaterial>);
+pub struct GlobalTextureArray(pub Handle<Image>);
+
+#[derive(Debug, Default, Clone, Copy, ShaderType)]
+pub struct BlockInteraction {
+    x: u32,
+    y: u32,
+    z: u32,
+    face: u32,
+    value: u32,
+}
+
+impl BlockInteraction {
+    pub fn set(&mut self, pos: LocalPos, face: VoxelFace) {
+        self.x = pos.x as u32;
+        self.y = pos.y as u32;
+        self.z = pos.z as u32;
+        self.face = face as u32;
+        self.value = 1;
+    }
+
+    pub fn unset(&mut self) {
+        self.value = 0;
+    }
+
+    pub fn is_set(&self) -> bool {
+        self.value > 0
+    }
+}
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct VoxelMaterial {
     #[texture(0, dimension = "2d_array")]
     #[sampler(1)]
     pub array_texture: Handle<Image>,
+    #[uniform(2)]
+    pub block_interaction: BlockInteraction,
 }
 
 impl Material for VoxelMaterial {
@@ -100,11 +133,10 @@ impl Material for VoxelMaterial {
     }
 }
 
-fn setup_global_voxel_material(
+fn setup_global_texture_array(
     mut commands: Commands,
     image_assets: Res<ImageAssets>,
     mut images: ResMut<Assets<Image>>,
-    mut materials: ResMut<Assets<VoxelMaterial>>,
 ) {
     let array_texture = create_texture_array(
         vec![
@@ -120,9 +152,7 @@ fn setup_global_voxel_material(
     )
     .unwrap();
 
-    commands.insert_resource(GlobalVoxelMaterial(
-        materials.add(VoxelMaterial { array_texture }),
-    ));
+    commands.insert_resource(GlobalTextureArray(array_texture));
 }
 
 fn create_texture_array(

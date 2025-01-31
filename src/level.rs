@@ -13,7 +13,7 @@ use crate::{
     block::Block,
     chunk::Chunk,
     game_state::GameState,
-    loader::GlobalVoxelMaterial,
+    loader::{BlockInteraction, GlobalTextureArray, VoxelMaterial},
     player::Player,
     position::{BlockPos, ChunkPos},
 };
@@ -121,7 +121,7 @@ fn setup_level(runtime: ResMut<TokioTasksRuntime>) {
 }
 
 fn generate_chunk_batch(
-    material: Res<GlobalVoxelMaterial>,
+    texture_array: Res<GlobalTextureArray>,
     db: Res<LevelDatabase>,
     runtime: Res<TokioTasksRuntime>,
     generator: Res<LevelGenerator>,
@@ -132,7 +132,7 @@ fn generate_chunk_batch(
     }
 
     task_status.running = true;
-    let material = material.0.clone();
+    let texture_array = texture_array.0.clone();
     let db = db.0.clone();
     let mut generator = generator.clone();
 
@@ -265,17 +265,25 @@ fn generate_chunk_batch(
                 chunks.push((chunk_pos, chunk));
             }
 
-            let material = material.clone();
+            let texture_array = texture_array.clone();
 
             // Add the chunks to the world
             ctx.run_on_main_thread(move |ctx| {
                 for (chunk_pos, chunk) in chunks {
+                    let material =
+                        ctx.world
+                            .resource_mut::<Assets<VoxelMaterial>>()
+                            .add(VoxelMaterial {
+                                array_texture: texture_array.clone(),
+                                block_interaction: BlockInteraction::default(),
+                            });
+
                     let entity = ctx
                         .world
                         .spawn((
                             chunk_pos,
                             Dirty,
-                            MeshMaterial3d(material.clone()),
+                            MeshMaterial3d(material),
                             Transform::from_xyz(
                                 chunk_pos.x as f32 * 16.0,
                                 chunk_pos.y as f32 * 16.0,
