@@ -5,6 +5,7 @@ use bevy_tokio_tasks::TokioTasksRuntime;
 use noise::{NoiseFn, Perlin, Seedable};
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sqlx::SqlitePool;
 
 use crate::{
@@ -21,7 +22,7 @@ const CHUNK_GENERATION_BATCH_SIZE: usize = 8; // Adjust this value as needed
 const TREE_HEIGHT: i32 = 12; // Tall but not gigantic
 const TREE_RADIUS: i32 = 3; // Reasonable canopy size
 const HOUSE_SIZE: i32 = 5;
-const STRUCTURE_ATTEMPT_SPACING: i32 = 10; // Increased structure density
+const STRUCTURE_ATTEMPT_SPACING: i32 = 8; // Increased structure density
 
 #[derive(Debug, Clone, Copy)]
 pub struct LevelPlugin;
@@ -548,10 +549,41 @@ fn generate_chunk_batch(
                         ))
                         .id();
 
+                    // Get all neighboring chunk entities in one pass
+                    let mut neighbor_entities = Vec::new();
+                    {
+                        let level = ctx.world.resource::<Level>();
+                        for dx in -1..=1 {
+                            for dy in -1..=1 {
+                                for dz in -1..=1 {
+                                    if dx == 0 && dy == 0 && dz == 0 {
+                                        continue;
+                                    }
+
+                                    let neighbor_pos = ChunkPos::new(
+                                        chunk_pos.x + dx,
+                                        chunk_pos.y + dy,
+                                        chunk_pos.z + dz,
+                                    );
+
+                                    if let Some(neighbor) = level.entity(neighbor_pos) {
+                                        neighbor_entities.push(neighbor);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Insert the new chunk
                     ctx.world
                         .resource_mut::<Level>()
                         .chunks
                         .insert(chunk_pos, LoadedChunk { chunk, entity });
+
+                    // Mark all neighbors as dirty in a single pass
+                    for &neighbor in &neighbor_entities {
+                        ctx.world.entity_mut(neighbor).insert(Dirty);
+                    }
 
                     ctx.world
                         .resource_mut::<ChunkGenerationQueue>()
@@ -573,12 +605,24 @@ fn build_chunk_meshes(
     dirty_query: Query<(Entity, &ChunkPos), With<Dirty>>,
     modified_query: Query<(Entity, &ChunkPos), With<Modified>>,
 ) {
-    for (entity, &chunk_pos) in dirty_query.iter().chain(modified_query.iter()) {
-        let Some(chunk) = level.chunk(chunk_pos) else {
+    let items = modified_query
+        .iter()
+        .chain(dirty_query.iter())
+        .collect::<Vec<_>>();
+
+    let items = items
+        .into_par_iter()
+        .map(|(entity, &chunk_pos)| {
+            let chunk = level.chunk(chunk_pos)?;
+            let mesh = chunk.render(&level, chunk_pos).build();
+            Some((entity, chunk_pos, mesh))
+        })
+        .collect::<Vec<_>>();
+
+    for item in items {
+        let Some((entity, chunk_pos, mesh)) = item else {
             continue;
         };
-
-        let mesh = chunk.render(&level, chunk_pos).build();
 
         commands
             .entity(entity)
@@ -586,7 +630,7 @@ fn build_chunk_meshes(
             .remove::<Dirty>()
             .remove::<Modified>();
 
-        let data = bincode::serialize(&chunk).unwrap();
+        let data = bincode::serialize(&level.chunk(chunk_pos).unwrap()).unwrap();
         let db = db.0.clone();
 
         if modified_query.contains(entity) {
