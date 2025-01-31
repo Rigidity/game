@@ -1,4 +1,4 @@
-use std::hash::{Hash, Hasher};
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 use bevy::{prelude::*, utils::HashMap, utils::HashSet};
 use bevy_tokio_tasks::TokioTasksRuntime;
@@ -133,111 +133,7 @@ impl LevelGenerator {
         positions
     }
 
-    fn set_block_world(&self, chunks: &mut HashMap<ChunkPos, Chunk>, pos: BlockPos, block: Block) {
-        let chunk_pos = pos.chunk_pos();
-        let local_pos = pos.local_pos();
-
-        // Get or create the chunk
-        chunks.entry(chunk_pos).or_default().set(local_pos, block);
-    }
-
-    fn generate_tree(
-        &self,
-        chunks: &mut HashMap<ChunkPos, Chunk>,
-        chunk_pos: ChunkPos,
-        base_pos: LocalPos,
-        rng: &mut ChaCha8Rng,
-    ) {
-        let base_world_pos = base_pos.block_pos(chunk_pos);
-        let height = TREE_HEIGHT + (rng.random::<i32>() % 3); // Less variation
-
-        // Generate single-block trunk
-        for y in 0..height {
-            let pos = base_world_pos + BlockPos::new(0, y, 0);
-            self.set_block_world(chunks, pos, Block::Wood);
-        }
-
-        // Generate Minecraft-style leaf arrangement
-        let leaf_start = height - 4;
-        let leaf_height = 5;
-
-        for y in 0..leaf_height {
-            let y_pos = leaf_start + y;
-            // Radius varies by height - wider in middle, narrower at top/bottom
-            let radius = if y == 0 || y == leaf_height - 1 { 1 } else { 2 };
-
-            for x in -radius..=radius {
-                for z in -radius..=radius {
-                    // Skip corners for rounder appearance
-                    if x * x + z * z > radius * radius + 1 {
-                        continue;
-                    }
-
-                    // Add some randomness to leaf placement
-                    if (x == radius || x == -radius || z == radius || z == -radius)
-                        && rng.random::<f32>() < 0.5
-                    {
-                        continue;
-                    }
-
-                    let pos = base_world_pos + BlockPos::new(x, y_pos, z);
-                    self.set_block_world(chunks, pos, Block::Leaves);
-                }
-            }
-        }
-
-        // Add a few random extra leaves for variety
-        for _ in 0..5 {
-            let x = rng.random_range(-3..=3);
-            let z = rng.random_range(-3..=3);
-            let y = rng.random_range(leaf_start..leaf_start + leaf_height);
-
-            if x != 0 || z != 0 {
-                // Don't place on trunk
-                let pos = base_world_pos + BlockPos::new(x, y, z);
-                self.set_block_world(chunks, pos, Block::Leaves);
-            }
-        }
-    }
-
-    fn generate_house(
-        &self,
-        chunks: &mut HashMap<ChunkPos, Chunk>,
-        chunk_pos: ChunkPos,
-        base_pos: LocalPos,
-        rng: &mut ChaCha8Rng,
-    ) {
-        let base_world_pos = base_pos.block_pos(chunk_pos);
-        let size = HOUSE_SIZE + (rng.random::<i32>() % 2);
-        let height = size - 1;
-
-        // Generate walls
-        for y in 0..height {
-            for x in 0..size {
-                for z in 0..size {
-                    if x == 0 || x == size - 1 || z == 0 || z == size - 1 {
-                        let pos = base_world_pos + BlockPos::new(x, y, z);
-                        self.set_block_world(chunks, pos, Block::Rock);
-                    }
-                }
-            }
-        }
-
-        // Generate roof
-        for x in -1..=size {
-            for z in -1..=size {
-                let pos = base_world_pos + BlockPos::new(x, height, z);
-                self.set_block_world(chunks, pos, Block::Rock);
-            }
-        }
-
-        // Add door
-        let door_pos = base_world_pos + BlockPos::new(0, 1, size / 2);
-        self.set_block_world(chunks, door_pos, Block::Air);
-    }
-
     fn generate_chunk(&mut self, chunk_pos: ChunkPos) -> Chunk {
-        let mut chunks = HashMap::new();
         let mut chunk = Chunk::new();
 
         // Generate terrain first
@@ -245,7 +141,8 @@ impl LevelGenerator {
             for y in 0..CHUNK_SIZE {
                 for z in 0..CHUNK_SIZE {
                     let local_pos = LocalPos::new(x, y, z);
-                    let pos = local_pos.block_pos(chunk_pos).world_pos();
+                    let block_pos = local_pos.block_pos(chunk_pos);
+                    let pos = block_pos.world_pos();
 
                     let density_factor = self.get_density_factor(&pos);
                     let terrain_density = self.get_terrain_density(&pos);
@@ -254,8 +151,7 @@ impl LevelGenerator {
                         // Check upwards until we find air to determine if we're near a surface
                         let distance_to_surface = (0..=5)
                             .find(|&d| {
-                                let check_pos =
-                                    (local_pos.block_pos(chunk_pos) + BlockPos::Y * d).world_pos();
+                                let check_pos = (block_pos + BlockPos::Y * d).world_pos();
                                 let check_density_factor = self.get_density_factor(&check_pos);
                                 let check_terrain_density = self.get_terrain_density(&check_pos);
                                 check_terrain_density <= check_density_factor
@@ -275,9 +171,6 @@ impl LevelGenerator {
                 }
             }
         }
-
-        // Insert the terrain-generated chunk into the chunks map
-        chunks.insert(chunk_pos, chunk);
 
         // Get all possible structure positions that could affect this chunk
         let structure_positions = self.get_structure_positions_affecting_chunk(chunk_pos);
@@ -305,16 +198,120 @@ impl LevelGenerator {
             // Use deterministic RNG for this position
             let mut rng = self.get_structure_rng(pos);
 
-            // Generate the structure
-            if rng.random::<f32>() < 0.9 {
-                self.generate_tree(&mut chunks, pos.chunk_pos(), pos.local_pos(), &mut rng);
-            } else {
-                self.generate_house(&mut chunks, pos.chunk_pos(), pos.local_pos(), &mut rng);
+            // Determine structure type first, using a single random check
+            let is_tree = rng.random::<f32>() < 0.9;
+
+            // For each block position in the chunk
+            for x in 0..CHUNK_SIZE {
+                for y in 0..CHUNK_SIZE {
+                    for z in 0..CHUNK_SIZE {
+                        let local_pos = LocalPos::new(x, y, z);
+                        let block_pos = local_pos.block_pos(chunk_pos);
+
+                        // Get the block type from the structure at this position
+                        let structure_block = if is_tree {
+                            self.get_tree_block(block_pos, pos, &mut rng)
+                        } else {
+                            self.get_house_block(block_pos, pos, &mut rng)
+                        };
+
+                        // If the structure defines a block here, override the terrain
+                        if let Some(block) = structure_block {
+                            chunk.set(local_pos, block);
+                        }
+                    }
+                }
             }
         }
 
-        // Return the current chunk
-        chunks.remove(&chunk_pos).unwrap_or_else(Chunk::new)
+        chunk
+    }
+
+    fn get_tree_block(
+        &self,
+        block_pos: BlockPos,
+        origin: BlockPos,
+        rng: &mut ChaCha8Rng,
+    ) -> Option<Block> {
+        let diff = block_pos - origin;
+
+        // Derive height deterministically from position
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        origin.hash(&mut hasher);
+        let height = TREE_HEIGHT + (hasher.finish() % 3) as i32;
+
+        // Trunk
+        if diff.x == 0 && diff.z == 0 && diff.y >= 0 && diff.y < height {
+            return Some(Block::Wood);
+        }
+
+        // Leaves
+        let leaf_start = height - 4;
+        let leaf_height = 5;
+
+        if diff.y >= leaf_start && diff.y < leaf_start + leaf_height {
+            let y_level = diff.y - leaf_start;
+            let radius = if y_level == 0 || y_level == leaf_height - 1 {
+                1
+            } else {
+                2
+            };
+
+            if diff.x.abs() <= radius && diff.z.abs() <= radius {
+                // Skip corners for rounder appearance
+                if diff.x * diff.x + diff.z * diff.z <= radius * radius + 1 {
+                    // Use RNG only for leaf detail variation
+                    if (diff.x.abs() == radius || diff.z.abs() == radius)
+                        && rng.random::<f32>() < 0.5
+                    {
+                        return None;
+                    }
+                    return Some(Block::Leaves);
+                }
+            }
+        }
+
+        None
+    }
+
+    fn get_house_block(
+        &self,
+        block_pos: BlockPos,
+        origin: BlockPos,
+        _rng: &mut ChaCha8Rng, // We won't use RNG for house generation
+    ) -> Option<Block> {
+        let diff = block_pos - origin;
+
+        // Derive size deterministically from position
+        let mut hasher = DefaultHasher::new();
+        origin.hash(&mut hasher);
+        let size = HOUSE_SIZE + (hasher.finish() % 2) as i32;
+        let height = size - 1;
+
+        // Check if the block is within house bounds
+        if diff.x >= 0
+            && diff.x < size
+            && diff.z >= 0
+            && diff.z < size
+            && diff.y >= 0
+            && diff.y <= height
+        {
+            // Walls
+            if diff.y < height {
+                if diff.x == 0 || diff.x == size - 1 || diff.z == 0 || diff.z == size - 1 {
+                    // Door
+                    if diff.y == 1 && diff.x == 0 && diff.z == size / 2 {
+                        return Some(Block::Air);
+                    }
+                    return Some(Block::Rock);
+                }
+            } else {
+                // Roof
+                return Some(Block::Rock);
+            }
+        }
+
+        None
     }
 }
 

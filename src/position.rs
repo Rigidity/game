@@ -1,4 +1,4 @@
-use std::ops::{Add, Mul};
+use std::ops::{Add, Mul, Sub};
 
 use bevy::prelude::*;
 
@@ -97,6 +97,18 @@ impl Add for BlockPos {
     }
 }
 
+impl Sub for BlockPos {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+        }
+    }
+}
+
 impl Mul<i32> for BlockPos {
     type Output = Self;
 
@@ -177,6 +189,26 @@ impl Add for ChunkPos {
             x: self.x + rhs.x,
             y: self.y + rhs.y,
             z: self.z + rhs.z,
+        }
+    }
+}
+
+impl Sub for ChunkPos {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        self + rhs * -1
+    }
+}
+
+impl Mul<i32> for ChunkPos {
+    type Output = Self;
+
+    fn mul(self, rhs: i32) -> Self::Output {
+        Self {
+            x: self.x * rhs,
+            y: self.y * rhs,
+            z: self.z * rhs,
         }
     }
 }
