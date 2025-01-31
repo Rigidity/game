@@ -32,5 +32,6 @@ fn main() {
             PhysicsPlugin,
             UiPlugin,
         ))
+        .insert_resource(ClearColor(Color::linear_rgb(0.3, 0.6, 0.9)))
         .run();
 }

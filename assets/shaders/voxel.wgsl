@@ -1,6 +1,6 @@
 #import bevy_pbr::{
     mesh_functions::{get_world_from_local, mesh_position_local_to_clip},
-    mesh_view_bindings::globals
+    mesh_view_bindings::{globals, view}
 }
 
 struct BlockInteraction {
@@ -82,11 +82,12 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     );
 
     var out: VertexOutput;
+    let model = get_world_from_local(vertex.instance_index);
     out.clip_position = mesh_position_local_to_clip(
-        get_world_from_local(vertex.instance_index),
+        model,
         vec4<f32>(final_pos, 1.0),
     );
-    out.world_position = vec4<f32>(final_pos, 1.0);
+    out.world_position = model * vec4<f32>(final_pos, 1.0);
     out.uv = uv;
     out.tex_index = tex_index;
     out.ao = ao;
@@ -120,5 +121,18 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let pulse = (sin(globals.time * 3.0) * 0.1) + 0.7;
     let interaction_factor = select(pulse, 1.0, in.interaction == 0u);
 
-    return vec4<f32>(texture_sample.rgb * ao_factor * interaction_factor, alpha);
+    // Calculate fog
+    let fog_color = vec3<f32>(0.3, 0.6, 0.9);  // Light blue-gray fog
+    let fog_start = 100.0;  // Distance where fog begins (increased from 10.0)
+    let fog_end = 120.0;    // Distance where fog is fully opaque (decreased range for sharper transition)
+    
+    // Calculate fog factor based on distance from camera
+    let distance = length(in.world_position.xyz - view.world_position.xyz);
+    let fog_factor = clamp((distance - fog_start) / (fog_end - fog_start), 0.0, 1.0);
+    
+    // Mix the texture color with fog color
+    let base_color = texture_sample.rgb * ao_factor * interaction_factor;
+    let final_color = mix(base_color, fog_color, fog_factor);
+
+    return vec4<f32>(final_color, alpha);
 }
