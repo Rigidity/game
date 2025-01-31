@@ -50,7 +50,7 @@ fn spawn_player(mut commands: Commands) {
     commands
         .spawn((
             Player::default(),
-            Transform::from_xyz(10.0, 200.0, 10.0),
+            Transform::from_xyz(0.0, 0.0, 0.0),
             Velocity(Vec3::ZERO),
             Visibility::Inherited,
         ))

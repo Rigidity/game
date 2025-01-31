@@ -10,6 +10,7 @@ mod loader;
 mod physics;
 mod player;
 mod position;
+mod ui;
 mod voxel_mesh;
 
 use bevy::prelude::*;
@@ -18,6 +19,7 @@ use level::LevelPlugin;
 use loader::LoaderPlugin;
 use physics::PhysicsPlugin;
 use player::PlayerPlugin;
+use ui::UiPlugin;
 
 fn main() {
     App::new()
@@ -28,6 +30,7 @@ fn main() {
             PlayerPlugin,
             LevelPlugin,
             PhysicsPlugin,
+            UiPlugin,
         ))
         .run();
 }
