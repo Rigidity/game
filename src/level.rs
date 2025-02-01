@@ -18,8 +18,8 @@ use crate::{
     position::{BlockPos, ChunkPos},
 };
 
-const CHUNK_UNLOAD_DISTANCE: i32 = 16; // Should be larger than generation radius
-const CHUNK_GENERATION_BATCH_SIZE: usize = 8; // Adjust this value as needed
+const CHUNK_UNLOAD_DISTANCE: i32 = 10; // Should be larger than generation radius
+const CHUNK_GENERATION_BATCH_SIZE: usize = 50; // Adjust this value as needed
 
 #[derive(Debug, Clone, Copy)]
 pub struct LevelPlugin;
@@ -141,7 +141,8 @@ fn start_chunk_generation(
                     let player_chunk = BlockPos::from_world(player_pos).chunk_pos();
 
                     // Find closest non-generated chunks within radius
-                    let radius = 12;
+                    let radius = 8;
+
                     let mut chunks = Vec::new();
 
                     for x in -radius..=radius {
@@ -299,6 +300,8 @@ fn start_chunk_generation(
                 }
             })
             .await;
+
+            sleep(Duration::from_millis(100)).await;
         }
     });
 }

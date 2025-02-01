@@ -10,13 +10,16 @@ impl Plugin for UiPlugin {
         app.add_systems(OnEnter(GameState::Playing), setup_ui)
             .add_systems(
                 Update,
-                update_position_text.run_if(in_state(GameState::Playing)),
+                (update_position_text, update_fps_text).run_if(in_state(GameState::Playing)),
             );
     }
 }
 
 #[derive(Debug, Clone, Copy, Component)]
 struct PositionText;
+
+#[derive(Debug, Clone, Copy, Component)]
+struct FpsText;
 
 fn setup_ui(mut commands: Commands) {
     commands.spawn((
@@ -25,6 +28,16 @@ fn setup_ui(mut commands: Commands) {
         Node {
             left: Val::Px(5.0),
             top: Val::Px(5.0),
+            ..default()
+        },
+    ));
+
+    commands.spawn((
+        FpsText,
+        Text::new("FPS: 0"),
+        Node {
+            left: Val::Px(5.0),
+            top: Val::Px(25.0),
             ..default()
         },
     ));
@@ -39,4 +52,10 @@ fn update_position_text(
 
     let mut text = text_query.single_mut();
     text.0 = format!("{}, {}, {}", pos.x, pos.y, pos.z);
+}
+
+fn update_fps_text(time: Res<Time>, mut text_query: Query<&mut Text, With<FpsText>>) {
+    let fps = 1.0 / time.delta_secs();
+    let mut text = text_query.single_mut();
+    text.0 = format!("FPS: {:.1}", fps);
 }
