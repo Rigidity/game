@@ -21,9 +21,12 @@ fn apply_physics(
 ) {
     let (mut transform, mut velocity, mut physics) = query.single_mut();
 
-    const GRAVITY: f32 = -25.0;
-    const TERMINAL_VELOCITY: f32 = -30.0;
-    const PLAYER_SIZE: Vec3 = Vec3::new(0.8, 1.8, 0.8);
+    // Minecraft-accurate constants
+    const GRAVITY: f32 = -30.0;
+    const TERMINAL_VELOCITY: f32 = -78.4;
+    const PLAYER_SIZE: Vec3 = Vec3::new(0.6, 1.8, 0.6); // Minecraft uses 0.6 wide
+    const GROUND_DRAG: f32 = 0.91;
+    const AIR_DRAG: f32 = 0.98;
 
     // Calculate new position
     let mut new_pos = transform.translation + velocity.0 * time.delta_secs();
@@ -75,30 +78,33 @@ fn apply_physics(
             },
         );
 
-        let overlap_array = overlap.to_array();
+        // Find axis with smallest overlap
+        let mut smallest_axis = 1; // Prefer Y-axis for Minecraft-like behavior
+        let mut smallest_value = overlap.y.abs();
 
-        // Find smallest overlap axis
-        let (axis, value) = overlap_array
-            .iter()
-            .enumerate()
-            .min_by(|(_, a), (_, b)| a.abs().partial_cmp(&b.abs()).unwrap())
-            .unwrap();
+        if overlap.x.abs() < smallest_value {
+            smallest_axis = 0;
+            smallest_value = overlap.x.abs();
+        }
+        if overlap.z.abs() < smallest_value {
+            smallest_axis = 2;
+        }
 
-        // Apply correction
-        match axis {
+        // Apply correction based on smallest overlap axis
+        match smallest_axis {
             0 => {
-                new_pos.x += value;
+                new_pos.x += overlap.x;
                 velocity.0.x = 0.0;
             }
             1 => {
-                new_pos.y += value;
-                if *value > 0.0 {
+                new_pos.y += overlap.y;
+                if overlap.y > 0.0 {
                     physics.on_ground = true;
                 }
                 velocity.0.y = 0.0;
             }
             2 => {
-                new_pos.z += value;
+                new_pos.z += overlap.z;
                 velocity.0.z = 0.0;
             }
             _ => unreachable!(),
@@ -114,10 +120,12 @@ fn apply_physics(
     // Apply final position
     transform.translation = new_pos;
 
-    // Apply drag to horizontal velocity when on ground
+    // Apply appropriate drag
     if physics.on_ground {
-        const GROUND_DRAG: f32 = 0.97;
         velocity.0.x *= GROUND_DRAG;
         velocity.0.z *= GROUND_DRAG;
+    } else {
+        velocity.0.x *= AIR_DRAG;
+        velocity.0.z *= AIR_DRAG;
     }
 }

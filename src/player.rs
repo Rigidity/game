@@ -57,6 +57,10 @@ fn spawn_player(mut commands: Commands) {
         .with_child((
             PlayerCamera,
             Camera3d::default(),
+            Projection::Perspective(PerspectiveProjection {
+                fov: 60.0f32.to_radians(),
+                ..default()
+            }),
             Transform::from_xyz(0.0, 0.6, 0.0),
             Visibility::Inherited,
         ));

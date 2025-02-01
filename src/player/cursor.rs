@@ -41,12 +41,13 @@ pub fn player_look(
 
     let mut transform = camera.single_mut();
 
+    const MOUSE_SENSITIVITY: f32 = 0.09;
+
     for ev in state.read() {
         let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
 
-        let window_scale = window.height().min(window.width());
-        pitch -= (0.00012 * ev.delta.y * window_scale).to_radians();
-        yaw -= (0.00012 * ev.delta.x * window_scale).to_radians();
+        pitch -= (MOUSE_SENSITIVITY * ev.delta.y).to_radians();
+        yaw -= (MOUSE_SENSITIVITY * ev.delta.x).to_radians();
 
         let yaw_rotation = Quat::from_axis_angle(Vec3::Y, yaw);
         let pitch_rotation = Quat::from_axis_angle(Vec3::X, pitch.clamp(-1.54, 1.54));
