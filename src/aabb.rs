@@ -24,15 +24,6 @@ impl Aabb {
         (self.min + self.max) * 0.5
     }
 
-    pub fn intersects(&self, other: &Aabb) -> bool {
-        self.min.x <= other.max.x
-            && self.max.x >= other.min.x
-            && self.min.y <= other.max.y
-            && self.max.y >= other.min.y
-            && self.min.z <= other.max.z
-            && self.max.z >= other.min.z
-    }
-
     pub fn ray_intersection(&self, ray_origin: Vec3, ray_direction: Vec3) -> Option<f32> {
         let t1 = (self.min - ray_origin) / ray_direction;
         let t2 = (self.max - ray_origin) / ray_direction;
