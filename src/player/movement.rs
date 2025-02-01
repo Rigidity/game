@@ -11,16 +11,20 @@ pub fn player_move(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
-    mut query: Query<(&mut Velocity, &Player)>,
+    mut query: Query<(&mut Velocity, &mut Transform, &Player)>,
     camera: Query<&Transform, (With<PlayerCamera>, Without<Player>)>,
 ) {
-    const MOVEMENT_SPEED: f32 = 14.0;
+    const MOVEMENT_SPEED: f32 = 11.0;
     const JUMP_FORCE: f32 = 7.6;
 
     if let Ok(window) = primary_window.get_single() {
-        let (mut velocity, physics) = query.single_mut();
+        let (mut velocity, mut p_transform, physics) = query.single_mut();
         let transform = camera.single();
         let mut movement = Vec3::ZERO;
+
+        if keys.just_pressed(KeyCode::KeyJ) {
+            p_transform.translation.x += 10000.0;
+        }
 
         // Get the camera's forward and right vectors
         let forward = transform.forward();
