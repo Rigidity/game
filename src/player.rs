@@ -22,7 +22,7 @@ impl Plugin for PlayerPlugin {
                 TimerMode::Once,
             )))
             .add_systems(
-                OnEnter(GameState::Playing),
+                OnEnter(GameState::Setup),
                 (spawn_player, initial_grab_cursor),
             )
             .add_systems(

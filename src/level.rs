@@ -29,15 +29,14 @@ impl Plugin for LevelPlugin {
         app.insert_resource(Level::new())
             .insert_resource(LevelGenerator::new(42))
             .insert_resource(ChunkGenerationQueue::default())
-            .insert_resource(ChunkGenerationTask::default())
             .add_systems(OnEnter(GameState::Setup), setup_level)
             .add_systems(
+                OnEnter(GameState::Playing),
+                (start_chunk_generation, start_saving),
+            )
+            .add_systems(
                 Update,
-                (
-                    generate_chunk_batch,
-                    build_chunk_meshes,
-                    unload_distant_chunks,
-                )
+                (build_chunk_meshes, unload_distant_chunks)
                     .chain()
                     .run_if(in_state(GameState::Playing)),
             );
@@ -97,11 +96,6 @@ struct ChunkGenerationQueue {
     pending: HashSet<ChunkPos>,
 }
 
-#[derive(Debug, Default, Resource)]
-struct ChunkGenerationTask {
-    running: bool,
-}
-
 fn setup_level(runtime: ResMut<TokioTasksRuntime>) {
     runtime.spawn_background_task(|mut ctx| async move {
         let pool = SqlitePool::connect("sqlite://./level.sqlite?mode=rwc")
@@ -120,18 +114,12 @@ fn setup_level(runtime: ResMut<TokioTasksRuntime>) {
     });
 }
 
-fn generate_chunk_batch(
+fn start_chunk_generation(
     texture_array: Res<GlobalTextureArray>,
     db: Res<LevelDatabase>,
     runtime: Res<TokioTasksRuntime>,
     generator: Res<LevelGenerator>,
-    mut task_status: ResMut<ChunkGenerationTask>,
 ) {
-    if task_status.running {
-        return;
-    }
-
-    task_status.running = true;
     let texture_array = texture_array.0.clone();
     let db = db.0.clone();
     let mut generator = generator.clone();
@@ -144,13 +132,9 @@ fn generate_chunk_batch(
                     let level = ctx.world.resource::<Level>();
                     let queue = ctx.world.resource::<ChunkGenerationQueue>();
 
-                    // Get player position - if no player, stop generating
                     let player_transform = match player_query.iter(ctx.world).next() {
                         Some(transform) => transform,
-                        None => {
-                            ctx.world.resource_mut::<ChunkGenerationTask>().running = false;
-                            return Vec::new();
-                        }
+                        None => return Vec::new(),
                     };
 
                     let player_pos = player_transform.translation;
@@ -197,26 +181,6 @@ fn generate_chunk_batch(
                 .await;
 
             if chunk_positions.is_empty() {
-                // No chunks need generation, sleep briefly and check again
-                // Only stop the task if there are no pending chunks
-                if ctx
-                    .run_on_main_thread(|ctx| {
-                        if ctx
-                            .world
-                            .resource::<ChunkGenerationQueue>()
-                            .pending
-                            .is_empty()
-                        {
-                            ctx.world.resource_mut::<ChunkGenerationTask>().running = false;
-                            true
-                        } else {
-                            false
-                        }
-                    })
-                    .await
-                {
-                    break;
-                }
                 sleep(Duration::from_millis(500)).await;
                 continue;
             }
@@ -339,45 +303,57 @@ fn generate_chunk_batch(
     });
 }
 
-fn build_chunk_meshes(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    runtime: Res<TokioTasksRuntime>,
-    db: Res<LevelDatabase>,
-    level: Res<Level>,
-    dirty_query: Query<(Entity, &ChunkPos), With<Dirty>>,
-    modified_query: Query<(Entity, &ChunkPos), With<Modified>>,
-) {
-    let items = modified_query
-        .iter()
-        .chain(dirty_query.iter())
-        .collect::<Vec<_>>();
+fn start_saving(db: Res<LevelDatabase>, runtime: Res<TokioTasksRuntime>) {
+    let db = db.0.clone();
 
-    let items = items
-        .into_par_iter()
-        .map(|(entity, &chunk_pos)| {
-            let chunk = level.chunk(chunk_pos)?;
-            let mesh = chunk.render(&level, chunk_pos).build();
-            Some((entity, chunk_pos, mesh))
-        })
-        .collect::<Vec<_>>();
+    runtime.spawn_background_task(move |mut ctx| async move {
+        let player = sqlx::query!("SELECT x, y, z, roll, pitch, yaw FROM player")
+            .fetch_one(&db)
+            .await
+            .unwrap();
 
-    for item in items {
-        let Some((entity, chunk_pos, mesh)) = item else {
-            continue;
-        };
+        let player_pos = Vec3::new(player.x as f32, player.y as f32, player.z as f32);
+        let player_rotation = Quat::from_euler(
+            EulerRot::XYZ,
+            player.roll as f32,
+            player.pitch as f32,
+            player.yaw as f32,
+        );
 
-        commands
-            .entity(entity)
-            .insert(Mesh3d(meshes.add(mesh)))
-            .remove::<Dirty>()
-            .remove::<Modified>();
+        ctx.run_on_main_thread(move |ctx| {
+            ctx.world
+                .query_filtered::<&mut Transform, With<Player>>()
+                .single()
+        });
 
-        let data = bincode::serialize(&level.chunk(chunk_pos).unwrap()).unwrap();
-        let db = db.0.clone();
+        loop {
+            let chunks_to_save = ctx
+                .run_on_main_thread(|ctx| {
+                    let modified: Vec<(Entity, ChunkPos)> = ctx
+                        .world
+                        .query_filtered::<(Entity, &ChunkPos), With<Modified>>()
+                        .iter(ctx.world)
+                        .map(|(entity, chunk_pos)| (entity, *chunk_pos))
+                        .collect();
 
-        if modified_query.contains(entity) {
-            runtime.spawn_background_task(move |mut _ctx| async move {
+                    for (entity, _pos) in &modified {
+                        ctx.world.entity_mut(*entity).remove::<Modified>();
+                    }
+
+                    let level = ctx.world.resource::<Level>();
+
+                    let chunks: Vec<(ChunkPos, Chunk)> = modified
+                        .iter()
+                        .filter_map(|(_, pos)| Some((*pos, level.chunk(*pos)?.clone())))
+                        .collect();
+
+                    chunks
+                })
+                .await;
+
+            for (chunk_pos, chunk) in chunks_to_save {
+                let data = bincode::serialize(&chunk).unwrap();
+
                 sqlx::query!(
                     "UPDATE chunks SET data = ? WHERE x = ? AND y = ? AND z = ?",
                     data,
@@ -388,8 +364,37 @@ fn build_chunk_meshes(
                 .execute(&db)
                 .await
                 .unwrap();
-            });
+            }
         }
+    });
+}
+
+fn build_chunk_meshes(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    level: Res<Level>,
+    dirty_query: Query<(Entity, &ChunkPos), With<Dirty>>,
+) {
+    let items = dirty_query.iter().collect::<Vec<_>>();
+
+    let items = items
+        .into_par_iter()
+        .map(|(entity, &chunk_pos)| {
+            let chunk = level.chunk(chunk_pos)?;
+            let mesh = chunk.render(&level, chunk_pos).build();
+            Some((entity, mesh))
+        })
+        .collect::<Vec<_>>();
+
+    for item in items {
+        let Some((entity, mesh)) = item else {
+            continue;
+        };
+
+        commands
+            .entity(entity)
+            .insert(Mesh3d(meshes.add(mesh)))
+            .remove::<Dirty>();
     }
 }
 

@@ -6,7 +6,7 @@ use bevy::{
 use crate::{
     aabb::Aabb,
     block::Block,
-    level::{Level, Modified},
+    level::{Dirty, Level, Modified},
     loader::VoxelMaterial,
     position::{BlockPos, ChunkPos, CHUNK_SIZE},
     voxel_mesh::VoxelFace,
@@ -185,7 +185,7 @@ pub fn break_or_place_block(
     }
 
     if let Some(entity) = level.entity(chunk_pos) {
-        commands.entity(entity).insert(Modified);
+        commands.entity(entity).insert((Modified, Dirty));
     }
 
     let neighbors = [
@@ -207,7 +207,7 @@ pub fn break_or_place_block(
         {
             let neighbor_pos = chunk_pos + offset;
             if let Some(entity) = level.entity(neighbor_pos) {
-                commands.entity(entity).insert(Modified);
+                commands.entity(entity).insert((Modified, Dirty));
             }
         }
     }
