@@ -11,10 +11,9 @@ use crate::{
     position::{BlockPos, ChunkPos, LocalPos, CHUNK_SIZE},
 };
 
-const TREE_HEIGHT: i32 = 12; // Tall but not gigantic
+const TREE_HEIGHT: i32 = 6; // Tall but not gigantic
 const TREE_RADIUS: i32 = 5; // Reasonable canopy size
-const HOUSE_SIZE: i32 = 5;
-const STRUCTURE_ATTEMPT_SPACING: i32 = 8; // Increased structure density
+const STRUCTURE_ATTEMPT_SPACING: i32 = 8; // Closer base spacing
 
 #[derive(Debug, Default, Clone, Resource)]
 pub struct LevelGenerator {
@@ -31,19 +30,22 @@ impl LevelGenerator {
     fn get_density_factor(&self, pos: &Vec3) -> f64 {
         let large_scale = self.noise.get([
             pos.x as f64 * 0.005,
-            pos.y as f64 * 0.005,
+            pos.y as f64 * 0.002,
             pos.z as f64 * 0.005,
         ]);
 
-        large_scale * 0.5 - 0.3
+        large_scale * 0.3 - 0.2
     }
 
     fn get_terrain_density(&self, pos: &Vec3) -> f64 {
-        self.noise.get([
+        let terrain = self.noise.get([
             pos.x as f64 * 0.02,
-            pos.y as f64 * 0.02,
+            pos.y as f64 * 0.04,
             pos.z as f64 * 0.02,
-        ])
+        ]);
+
+        let height_bias = (pos.y as f64 * 0.01).abs();
+        terrain + height_bias * 0.3
     }
 
     fn get_structure_rng(&self, pos: BlockPos) -> ChaCha8Rng {
@@ -53,11 +55,10 @@ impl LevelGenerator {
         ChaCha8Rng::seed_from_u64(hash ^ self.noise.seed() as u64)
     }
 
-    // Add this helper function to find structure origins that could affect a chunk
     fn get_structure_positions_affecting_chunk(&self, chunk_pos: ChunkPos) -> Vec<BlockPos> {
         let chunk_min = chunk_pos.world_pos();
         let chunk_max = (chunk_pos + ChunkPos::new(1, 1, 1)).world_pos();
-        let structure_radius = (HOUSE_SIZE.max(TREE_HEIGHT + TREE_RADIUS) + 1) as f32;
+        let structure_radius = (0.max(TREE_HEIGHT + TREE_RADIUS) + 1) as f32;
 
         // Calculate the grid positions that could affect this chunk
         let min_x =
@@ -79,13 +80,24 @@ impl LevelGenerator {
         for x in min_x..=max_x {
             for y in min_y..=max_y {
                 for z in min_z..=max_z {
-                    // Get the structure origin point
-                    let origin = BlockPos::new(
+                    let base_pos = BlockPos::new(
                         x * STRUCTURE_ATTEMPT_SPACING,
                         y * CHUNK_SIZE as i32,
                         z * STRUCTURE_ATTEMPT_SPACING,
                     );
-                    positions.push(origin);
+
+                    let mut cell_rng = self.get_structure_rng(base_pos);
+
+                    // Increase spawn chance to 70%
+                    if cell_rng.random::<f32>() < 0.7 {
+                        // Smaller random offset for more even distribution
+                        let offset_x = cell_rng.random_range(-2..3);
+                        let offset_z = cell_rng.random_range(-2..3);
+
+                        let origin =
+                            BlockPos::new(base_pos.x + offset_x, base_pos.y, base_pos.z + offset_z);
+                        positions.push(origin);
+                    }
                 }
             }
         }
@@ -139,27 +151,37 @@ impl LevelGenerator {
         for pos in structure_positions {
             let world_pos = pos.world_pos();
 
-            // Check density at structure position
-            let density_factor = self.get_density_factor(&world_pos);
-            let terrain_density = self.get_terrain_density(&world_pos);
+            // Check a few positions around the base to ensure we're on relatively flat ground
+            let base_positions = [
+                world_pos + Vec3::new(0.0, -1.0, 0.0), // Below
+                world_pos + Vec3::new(1.0, -1.0, 0.0), // Adjacent below positions
+                world_pos + Vec3::new(-1.0, -1.0, 0.0),
+                world_pos + Vec3::new(0.0, -1.0, 1.0),
+                world_pos + Vec3::new(0.0, -1.0, -1.0),
+            ];
 
-            // Only generate if we're at an air/ground boundary
-            if terrain_density > density_factor {
+            // Check if we're on solid ground
+            let valid_ground = base_positions.iter().all(|check_pos| {
+                let check_density_factor = self.get_density_factor(check_pos);
+                let check_terrain_density = self.get_terrain_density(check_pos);
+                check_terrain_density > check_density_factor
+            });
+
+            if !valid_ground {
                 continue;
             }
 
-            let below_pos = world_pos + Vec3::new(0.0, -1.0, 0.0);
-            let below_density_factor = self.get_density_factor(&below_pos);
-            let below_terrain_density = self.get_terrain_density(&below_pos);
-            if below_terrain_density <= below_density_factor {
+            // Check if we have air space for the tree
+            let air_pos = world_pos;
+            let air_density_factor = self.get_density_factor(&air_pos);
+            let air_terrain_density = self.get_terrain_density(&air_pos);
+
+            if air_terrain_density > air_density_factor {
                 continue;
             }
 
             // Use deterministic RNG for this position
             let mut rng = self.get_structure_rng(pos);
-
-            // Determine structure type first, using a single random check
-            let is_tree = rng.random::<f32>() < 0.9;
 
             // For each block position in the chunk
             for x in 0..CHUNK_SIZE {
@@ -169,11 +191,7 @@ impl LevelGenerator {
                         let block_pos = local_pos.block_pos(chunk_pos);
 
                         // Get the block type from the structure at this position
-                        let structure_block = if is_tree {
-                            self.get_tree_block(block_pos, pos, &mut rng)
-                        } else {
-                            self.get_house_block(block_pos, pos, &mut rng)
-                        };
+                        let structure_block = self.get_tree_block(block_pos, pos, &mut rng);
 
                         // If the structure defines a block here, override the terrain
                         if let Some(block) = structure_block {
@@ -228,46 +246,6 @@ impl LevelGenerator {
                     }
                     return Some(Block::Leaves);
                 }
-            }
-        }
-
-        None
-    }
-
-    fn get_house_block(
-        &self,
-        block_pos: BlockPos,
-        origin: BlockPos,
-        _rng: &mut ChaCha8Rng, // We won't use RNG for house generation
-    ) -> Option<Block> {
-        let diff = block_pos - origin;
-
-        // Derive size deterministically from position
-        let mut hasher = DefaultHasher::new();
-        origin.hash(&mut hasher);
-        let size = HOUSE_SIZE + (hasher.finish() % 2) as i32;
-        let height = size - 1;
-
-        // Check if the block is within house bounds
-        if diff.x >= 0
-            && diff.x < size
-            && diff.z >= 0
-            && diff.z < size
-            && diff.y >= 0
-            && diff.y <= height
-        {
-            // Walls
-            if diff.y < height {
-                if diff.x == 0 || diff.x == size - 1 || diff.z == 0 || diff.z == size - 1 {
-                    // Door
-                    if diff.y == 1 && diff.x == 0 && diff.z == size / 2 {
-                        return Some(Block::Air);
-                    }
-                    return Some(Block::Rock);
-                }
-            } else {
-                // Roof
-                return Some(Block::Rock);
             }
         }
 
