@@ -15,6 +15,15 @@ impl Aabb {
         }
     }
 
+    pub fn translate(&mut self, translation: Vec3) {
+        self.min += translation;
+        self.max += translation;
+    }
+
+    pub fn center(&self) -> Vec3 {
+        (self.min + self.max) * 0.5
+    }
+
     pub fn intersects(&self, other: &Aabb) -> bool {
         self.min.x <= other.max.x
             && self.max.x >= other.min.x

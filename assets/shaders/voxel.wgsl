@@ -98,7 +98,6 @@ fn vertex(vertex: Vertex) -> VertexOutput {
         block_interaction.x == x_int
             && block_interaction.y == y_int
             && block_interaction.z == z_int
-            && block_interaction.face == face
     );
 
     return out;
@@ -118,13 +117,13 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let alpha = select(texture_sample.a, 0.8, texture_sample.a < 0.9);
 
     // Create a slower, more obvious pulsating effect
-    let pulse = (sin(globals.time * 3.0) * 0.1) + 0.7;
+    let pulse = (sin(globals.time * 5.0) * 0.1) + 0.7;
     let interaction_factor = select(pulse, 1.0, in.interaction == 0u);
 
     // Calculate fog
     let fog_color = vec3<f32>(0.3, 0.6, 0.9);  // Light blue-gray fog
-    let fog_start = 100.0;  // Distance where fog begins (increased from 10.0)
-    let fog_end = 120.0;    // Distance where fog is fully opaque (decreased range for sharper transition)
+    let fog_start = 80.0;  // Distance where fog begins (increased from 10.0)
+    let fog_end = 90.0;    // Distance where fog is fully opaque (decreased range for sharper transition)
     
     // Calculate fog factor based on distance from camera
     let distance = length(in.world_position.xyz - view.world_position.xyz);

@@ -181,7 +181,7 @@ pub fn break_or_place_block(
     if is_breaking {
         chunk.set(local_pos, Block::Air);
     } else {
-        chunk.set(local_pos, Block::Leaves);
+        chunk.set(local_pos, Block::Rock);
     }
 
     if let Some(entity) = level.entity(chunk_pos) {

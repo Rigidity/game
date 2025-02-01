@@ -30,22 +30,19 @@ impl LevelGenerator {
     fn get_density_factor(&self, pos: &Vec3) -> f64 {
         let large_scale = self.noise.get([
             pos.x as f64 * 0.005,
-            pos.y as f64 * 0.002,
+            pos.y as f64 * 0.005,
             pos.z as f64 * 0.005,
         ]);
 
-        large_scale * 0.3 - 0.2
+        large_scale * 0.6
     }
 
     fn get_terrain_density(&self, pos: &Vec3) -> f64 {
-        let terrain = self.noise.get([
+        self.noise.get([
             pos.x as f64 * 0.02,
-            pos.y as f64 * 0.04,
+            pos.y as f64 * 0.02,
             pos.z as f64 * 0.02,
-        ]);
-
-        let height_bias = (pos.y as f64 * 0.01).abs();
-        terrain + height_bias * 0.3
+        ])
     }
 
     fn get_structure_rng(&self, pos: BlockPos) -> ChaCha8Rng {
