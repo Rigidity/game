@@ -14,7 +14,7 @@ use crate::{
     chunk::Chunk,
     game_state::GameState,
     loader::{BlockInteraction, GlobalTextureArray, VoxelMaterial},
-    player::Player,
+    player::{Player, PlayerCamera},
     position::{BlockPos, ChunkPos},
 };
 
@@ -323,11 +323,17 @@ fn start_saving(db: Res<LevelDatabase>, runtime: Res<TokioTasksRuntime>) {
         ctx.run_on_main_thread(move |ctx| {
             ctx.world
                 .query_filtered::<&mut Transform, With<Player>>()
-                .single()
-        });
+                .single_mut(ctx.world)
+                .translation = player_pos;
+            ctx.world
+                .query_filtered::<&mut Transform, With<PlayerCamera>>()
+                .single_mut(ctx.world)
+                .rotation = player_rotation;
+        })
+        .await;
 
         loop {
-            let chunks_to_save = ctx
+            let (chunks_to_save, player_pos, player_rotation) = ctx
                 .run_on_main_thread(|ctx| {
                     let modified: Vec<(Entity, ChunkPos)> = ctx
                         .world
@@ -347,7 +353,20 @@ fn start_saving(db: Res<LevelDatabase>, runtime: Res<TokioTasksRuntime>) {
                         .filter_map(|(_, pos)| Some((*pos, level.chunk(*pos)?.clone())))
                         .collect();
 
-                    chunks
+                    let player_pos = ctx
+                        .world
+                        .query_filtered::<&Transform, With<Player>>()
+                        .single(ctx.world)
+                        .translation;
+
+                    let player_rotation = ctx
+                        .world
+                        .query_filtered::<&Transform, With<PlayerCamera>>()
+                        .single(ctx.world)
+                        .rotation
+                        .to_euler(EulerRot::XYZ);
+
+                    (chunks, player_pos, player_rotation)
                 })
                 .await;
 
@@ -365,6 +384,21 @@ fn start_saving(db: Res<LevelDatabase>, runtime: Res<TokioTasksRuntime>) {
                 .await
                 .unwrap();
             }
+
+            sqlx::query!(
+                "UPDATE player SET x = ?, y = ?, z = ?, roll = ?, pitch = ?, yaw = ?",
+                player_pos.x,
+                player_pos.y,
+                player_pos.z,
+                player_rotation.0,
+                player_rotation.1,
+                player_rotation.2
+            )
+            .execute(&db)
+            .await
+            .unwrap();
+
+            sleep(Duration::from_millis(250)).await;
         }
     });
 }

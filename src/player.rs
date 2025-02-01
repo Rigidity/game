@@ -44,7 +44,7 @@ pub struct Player {
 }
 
 #[derive(Debug, Clone, Copy, Component)]
-struct PlayerCamera;
+pub struct PlayerCamera;
 
 fn spawn_player(mut commands: Commands) {
     commands
