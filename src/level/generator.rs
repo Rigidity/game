@@ -13,22 +13,26 @@ use crate::{
 
 const TREE_HEIGHT: i32 = 6; // Tall but not gigantic
 const TREE_RADIUS: i32 = 5; // Reasonable canopy size
-const STRUCTURE_ATTEMPT_SPACING: i32 = 8; // Closer base spacing
+const STRUCTURE_ATTEMPT_SPACING: i32 = 4; // Closer base spacing
 
 #[derive(Debug, Default, Clone, Resource)]
 pub struct LevelGenerator {
-    noise: Perlin,
+    density_noise: Perlin,
+    terrain_noise: Perlin,
+    moisture_noise: Perlin,
 }
 
 impl LevelGenerator {
     pub fn new(seed: u32) -> Self {
         Self {
-            noise: Perlin::new(seed),
+            density_noise: Perlin::new(seed),
+            terrain_noise: Perlin::new(seed + 1),
+            moisture_noise: Perlin::new(seed + 2),
         }
     }
 
     fn get_density_factor(&self, pos: &Vec3) -> f64 {
-        let large_scale = self.noise.get([
+        let large_scale = self.density_noise.get([
             pos.x as f64 * 0.005,
             pos.y as f64 * 0.005,
             pos.z as f64 * 0.005,
@@ -38,18 +42,27 @@ impl LevelGenerator {
     }
 
     fn get_terrain_density(&self, pos: &Vec3) -> f64 {
-        self.noise.get([
-            pos.x as f64 * 0.02,
+        self.terrain_noise.get([
+            pos.x as f64 * 0.015,
             pos.y as f64 * 0.02,
-            pos.z as f64 * 0.02,
+            pos.z as f64 * 0.015,
         ])
+    }
+
+    fn get_moisture(&self, pos: &Vec3) -> f64 {
+        (self.moisture_noise.get([
+            pos.x as f64 * 0.003,
+            pos.y as f64 * 0.01,
+            pos.z as f64 * 0.003,
+        ]) + 1.0)
+            / 2.0
     }
 
     fn get_structure_rng(&self, pos: BlockPos) -> ChaCha8Rng {
         let mut hasher = DefaultHasher::new();
         pos.hash(&mut hasher);
         let hash = hasher.finish();
-        ChaCha8Rng::seed_from_u64(hash ^ self.noise.seed() as u64)
+        ChaCha8Rng::seed_from_u64(hash ^ self.density_noise.seed() as u64)
     }
 
     fn get_structure_positions_affecting_chunk(&self, chunk_pos: ChunkPos) -> Vec<BlockPos> {
@@ -115,7 +128,7 @@ impl LevelGenerator {
 
                     let density_factor = self.get_density_factor(&pos);
                     let terrain_density = self.get_terrain_density(&pos);
-
+                    let moisture = self.get_moisture(&pos);
                     if terrain_density > density_factor {
                         // Check upwards until we find air to determine if we're near a surface
                         let distance_to_surface = (0..=5)
@@ -128,9 +141,17 @@ impl LevelGenerator {
                             .unwrap_or(5);
 
                         let block_type = if distance_to_surface == 1 {
-                            Block::Grass
+                            if moisture > 0.3 {
+                                Block::Grass
+                            } else {
+                                Block::Sand
+                            }
                         } else if distance_to_surface <= 3 {
-                            Block::Dirt
+                            if moisture > 0.3 {
+                                Block::Dirt
+                            } else {
+                                Block::Sand
+                            }
                         } else {
                             Block::Rock
                         };

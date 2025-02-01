@@ -38,11 +38,13 @@ pub enum Block {
     Grass,
     Leaves,
     Wood,
+    Sand,
+    Water,
 }
 
 impl Block {
     pub fn is_solid(self) -> bool {
-        !matches!(self, Self::Air | Self::Leaves)
+        !matches!(self, Self::Air | Self::Leaves | Self::Water)
     }
 
     pub fn render(
@@ -76,6 +78,8 @@ impl Block {
                         (Self::Leaves, _) => 4,
                         (Self::Wood, VoxelFace::Top | VoxelFace::Bottom) => 6,
                         (Self::Wood, _) => 5,
+                        (Self::Sand, _) => 7,
+                        (Self::Water, _) => 8,
                     },
                 );
             }

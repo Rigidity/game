@@ -51,6 +51,10 @@ pub struct ImageAssets {
     pub wood: Handle<Image>,
     #[asset(path = "Voxels/WoodSide.png")]
     pub wood_side: Handle<Image>,
+    #[asset(path = "Voxels/Sand.png")]
+    pub sand: Handle<Image>,
+    #[asset(path = "Voxels/Water.png")]
+    pub water: Handle<Image>,
 }
 
 #[derive(Debug, Clone, Resource)]
@@ -147,6 +151,8 @@ fn setup_global_texture_array(
             image_assets.leaves.clone(),
             image_assets.wood_side.clone(),
             image_assets.wood.clone(),
+            image_assets.sand.clone(),
+            image_assets.water.clone(),
         ],
         &mut images,
     )
