@@ -32,21 +32,60 @@ impl LevelGenerator {
     }
 
     fn get_density_factor(&self, pos: &Vec3) -> f64 {
-        let large_scale = self.density_noise.get([
+        // Create distinct layers with different frequencies
+        let base_scale = self.density_noise.get([
             pos.x as f64 * 0.005,
             pos.y as f64 * 0.005,
             pos.z as f64 * 0.005,
-        ]);
+        ]) * 0.6;
 
-        large_scale * 0.6
+        // Add floating island layer
+        let island_scale = self.density_noise.get([
+            pos.x as f64 * 0.015,
+            (pos.y as f64 + 1000.0) * 0.008, // Offset Y to get different pattern
+            pos.z as f64 * 0.015,
+        ]) * 0.4;
+
+        // Create height-based bands for different layers
+        let y_level = pos.y as f64;
+
+        // Define different zones
+        let surface_zone = (y_level - 64.0) / 32.0;
+        let floating_zone = (y_level - 128.0) / 32.0;
+
+        // Smoothly blend between zones
+        let surface_influence = (-surface_zone * surface_zone).exp();
+        let floating_influence = (-floating_zone * floating_zone).exp();
+
+        // Combine the layers
+        let combined = base_scale * surface_influence + island_scale * floating_influence;
+
+        // Add cave systems
+        let cave_noise = self.density_noise.get([
+            pos.x as f64 * 0.03,
+            pos.y as f64 * 0.03,
+            pos.z as f64 * 0.03,
+        ]) * 0.5;
+
+        combined + cave_noise
     }
 
     fn get_terrain_density(&self, pos: &Vec3) -> f64 {
-        self.terrain_noise.get([
+        // Make terrain more varied
+        let base_terrain = self.terrain_noise.get([
             pos.x as f64 * 0.015,
             pos.y as f64 * 0.02,
             pos.z as f64 * 0.015,
-        ])
+        ]);
+
+        // Add some smaller detail
+        let detail = self.terrain_noise.get([
+            pos.x as f64 * 0.05,
+            pos.y as f64 * 0.05,
+            pos.z as f64 * 0.05,
+        ]) * 0.3;
+
+        base_terrain + detail
     }
 
     fn get_moisture(&self, pos: &Vec3) -> f64 {
