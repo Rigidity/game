@@ -13,7 +13,9 @@ struct BlockInteraction {
 
 @group(2) @binding(0) var array_texture: texture_2d_array<f32>;
 @group(2) @binding(1) var array_texture_sampler: sampler;
-@group(2) @binding(2) var<uniform> block_interaction: BlockInteraction;
+@group(2) @binding(2) var destroy_texture: texture_2d_array<f32>;
+@group(2) @binding(3) var destroy_texture_sampler: sampler;
+@group(2) @binding(4) var<uniform> block_interaction: BlockInteraction;
 
 struct Vertex {
     @builtin(instance_index) instance_index: u32,
@@ -116,22 +118,34 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // For semi-transparent pixels (like leaves), use a higher alpha threshold
     let alpha = select(texture_sample.a, 0.8, texture_sample.a < 0.9);
 
-    // Create a slower, more obvious pulsating effect
-    let pulse = (sin(globals.time * 5.0) * 0.1) + 0.7;
-    let interaction_factor = select(pulse, 1.0, in.interaction == 0u);
+    var final_color = texture_sample.rgb;
+
+    // Apply destroy texture overlay if block is being broken
+    if (in.interaction > 0u) {
+         // Create a slower, more obvious pulsating effect
+        let pulse = (sin(globals.time * 4.0) * 0.1) + 0.8;
+        let interaction_factor = select(pulse, 1.0, in.interaction == 0u);
+        final_color = final_color * ao_factor * interaction_factor;
+
+        if (in.interaction > 1u) {
+            let destroy_stage = in.interaction - 2u;  // Convert to 0-10 range
+            let destroy_overlay = textureSample(destroy_texture, destroy_texture_sampler, in.uv, i32(destroy_stage));
+            // Blend colors taking alpha into account
+            final_color = final_color * (1.0 - destroy_overlay.a) + destroy_overlay.rgb * destroy_overlay.a;
+        }
+    }
+
+    final_color *= ao_factor;
 
     // Calculate fog
-    let fog_color = vec3<f32>(0.3, 0.6, 0.9);  // Light blue-gray fog
-    let fog_start = 80.0;  // Distance where fog begins (increased from 10.0)
-    let fog_end = 90.0;    // Distance where fog is fully opaque (decreased range for sharper transition)
+    let fog_color = vec3<f32>(0.3, 0.6, 0.9);
+    let fog_start = 80.0;
+    let fog_end = 90.0;
     
-    // Calculate fog factor based on distance from camera
     let distance = length(in.world_position.xyz - view.world_position.xyz);
     let fog_factor = clamp((distance - fog_start) / (fog_end - fog_start), 0.0, 1.0);
     
-    // Mix the texture color with fog color
-    let base_color = texture_sample.rgb * ao_factor * interaction_factor;
-    let final_color = mix(base_color, fog_color, fog_factor);
+    final_color = mix(final_color, fog_color, fog_factor);
 
     return vec4<f32>(final_color, alpha);
 }

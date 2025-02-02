@@ -8,13 +8,15 @@ use crate::{
     block::Block,
     level::{Dirty, Level, Modified},
     loader::VoxelMaterial,
-    position::{BlockPos, ChunkPos, CHUNK_SIZE},
+    position::{BlockPos, ChunkPos, LocalPos, CHUNK_SIZE},
     voxel_mesh::VoxelFace,
 };
 
 use super::{Player, PlayerCamera};
 
 const MAX_REACH: f32 = 5.0;
+const BLOCK_BREAK_TIME: f32 = 0.5; // Time in seconds to break a block
+const BREAK_STAGES: u32 = 10; // Number of breaking animation stages (0-10)
 
 #[derive(Debug, Default, Clone, Copy, Resource)]
 pub struct FocusedBlock {
@@ -23,12 +25,25 @@ pub struct FocusedBlock {
     pub face: Option<VoxelFace>,
 }
 
-#[derive(Debug, Default, Clone, Resource)]
-pub struct InteractionTimer(pub Timer);
+#[derive(Resource)]
+pub struct BlockBreakProgress {
+    pub position: Option<BlockPos>,
+    pub progress: f32,
+}
+
+impl Default for BlockBreakProgress {
+    fn default() -> Self {
+        Self {
+            position: None,
+            progress: 0.0,
+        }
+    }
+}
 
 pub fn update_focused_block(
     level: Res<Level>,
     mut focused_block: ResMut<FocusedBlock>,
+    break_progress: Res<BlockBreakProgress>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
     camera_query: Query<(&Transform, &Parent), With<PlayerCamera>>,
     player_query: Query<&Transform, With<Player>>,
@@ -123,7 +138,17 @@ pub fn update_focused_block(
         let material = materials.get_mut(&material.0).unwrap();
 
         if chunk_pos == hit_chunk_pos && focused_block.block_pos.is_some() {
-            material.block_interaction.set(local_pos, face);
+            let break_stage = if let Some(pos) = break_progress.position {
+                if pos == block_pos {
+                    let stage = (break_progress.progress * BREAK_STAGES as f32) as u32;
+                    stage.min(BREAK_STAGES) + 1
+                } else {
+                    1
+                }
+            } else {
+                1
+            };
+            material.block_interaction.set(local_pos, face, break_stage);
         } else {
             material.block_interaction.unset();
         }
@@ -136,11 +161,9 @@ pub fn break_or_place_block(
     focused_block: Res<FocusedBlock>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
     mut level: ResMut<Level>,
-    mut timer: ResMut<InteractionTimer>,
+    mut break_progress: ResMut<BlockBreakProgress>,
     mut commands: Commands,
 ) {
-    timer.0.tick(time.delta());
-
     let Ok(window) = primary_window.get_single() else {
         return;
     };
@@ -149,66 +172,52 @@ pub fn break_or_place_block(
         return;
     }
 
-    let is_breaking = mouse.just_pressed(MouseButton::Left)
-        || (mouse.pressed(MouseButton::Left) && timer.0.just_finished());
+    if mouse.pressed(MouseButton::Left) {
+        if let Some(block_pos) = focused_block.block_pos {
+            if break_progress.position != Some(block_pos) {
+                break_progress.position = Some(block_pos);
+                break_progress.progress = 0.0;
+            }
 
-    let is_placing = mouse.just_pressed(MouseButton::Right)
-        || (mouse.pressed(MouseButton::Right) && timer.0.just_finished());
+            break_progress.progress += time.delta_secs() / BLOCK_BREAK_TIME;
 
-    if !is_breaking && !is_placing {
-        return;
+            if break_progress.progress >= 1.0 {
+                let chunk_pos = block_pos.chunk_pos();
+                let local_pos = block_pos.local_pos();
+
+                if let Some(chunk) = level.chunk_mut(chunk_pos) {
+                    chunk.set(local_pos, Block::Air);
+                }
+
+                if let Some(entity) = level.entity(chunk_pos) {
+                    commands.entity(entity).insert((Modified, Dirty));
+                }
+
+                update_neighbor_chunks(&level, &mut commands, chunk_pos, local_pos);
+
+                break_progress.position = None;
+                break_progress.progress = 0.0;
+            }
+        }
+    } else if mouse.just_released(MouseButton::Left) {
+        break_progress.position = None;
+        break_progress.progress = 0.0;
     }
 
-    timer.0.reset();
+    if mouse.just_pressed(MouseButton::Right) {
+        if let Some(air_pos) = focused_block.air_pos {
+            let chunk_pos = air_pos.chunk_pos();
+            let local_pos = air_pos.local_pos();
 
-    let block_pos = if is_breaking {
-        focused_block.block_pos
-    } else {
-        focused_block.air_pos
-    };
+            if let Some(chunk) = level.chunk_mut(chunk_pos) {
+                chunk.set(local_pos, Block::Rock);
+            }
 
-    let Some(block_pos) = block_pos else {
-        return;
-    };
-
-    let chunk_pos = block_pos.chunk_pos();
-    let local_pos = block_pos.local_pos();
-
-    let Some(chunk) = level.chunk_mut(chunk_pos) else {
-        return;
-    };
-
-    if is_breaking {
-        chunk.set(local_pos, Block::Air);
-    } else {
-        chunk.set(local_pos, Block::Rock);
-    }
-
-    if let Some(entity) = level.entity(chunk_pos) {
-        commands.entity(entity).insert((Modified, Dirty));
-    }
-
-    let neighbors = [
-        ChunkPos::X,
-        ChunkPos::NEG_X,
-        ChunkPos::Y,
-        ChunkPos::NEG_Y,
-        ChunkPos::Z,
-        ChunkPos::NEG_Z,
-    ];
-
-    for &offset in &neighbors {
-        if local_pos.x == 0
-            || local_pos.x == CHUNK_SIZE - 1
-            || local_pos.y == 0
-            || local_pos.y == CHUNK_SIZE - 1
-            || local_pos.z == 0
-            || local_pos.z == CHUNK_SIZE - 1
-        {
-            let neighbor_pos = chunk_pos + offset;
-            if let Some(entity) = level.entity(neighbor_pos) {
+            if let Some(entity) = level.entity(chunk_pos) {
                 commands.entity(entity).insert((Modified, Dirty));
             }
+
+            update_neighbor_chunks(&level, &mut commands, chunk_pos, local_pos);
         }
     }
 }
@@ -258,4 +267,35 @@ fn raycast_blocks(
     }
 
     None
+}
+
+fn update_neighbor_chunks(
+    level: &Level,
+    commands: &mut Commands,
+    chunk_pos: ChunkPos,
+    local_pos: LocalPos,
+) {
+    let neighbors = [
+        ChunkPos::X,
+        ChunkPos::NEG_X,
+        ChunkPos::Y,
+        ChunkPos::NEG_Y,
+        ChunkPos::Z,
+        ChunkPos::NEG_Z,
+    ];
+
+    for &offset in &neighbors {
+        if local_pos.x == 0
+            || local_pos.x == CHUNK_SIZE - 1
+            || local_pos.y == 0
+            || local_pos.y == CHUNK_SIZE - 1
+            || local_pos.z == 0
+            || local_pos.z == CHUNK_SIZE - 1
+        {
+            let neighbor_pos = chunk_pos + offset;
+            if let Some(entity) = level.entity(neighbor_pos) {
+                commands.entity(entity).insert((Modified, Dirty));
+            }
+        }
+    }
 }

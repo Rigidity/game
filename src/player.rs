@@ -2,11 +2,9 @@ mod cursor;
 mod interaction;
 mod movement;
 
-use std::time::Duration;
-
 use bevy::prelude::*;
 use cursor::{initial_grab_cursor, player_look, toggle_grab};
-use interaction::{break_or_place_block, update_focused_block, FocusedBlock, InteractionTimer};
+use interaction::{break_or_place_block, update_focused_block, BlockBreakProgress, FocusedBlock};
 use movement::player_move;
 
 use crate::{game_state::GameState, physics::Velocity};
@@ -17,10 +15,7 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FocusedBlock>()
-            .insert_resource(InteractionTimer(Timer::new(
-                Duration::from_millis(400),
-                TimerMode::Once,
-            )))
+            .init_resource::<BlockBreakProgress>()
             .add_systems(
                 OnEnter(GameState::Setup),
                 (spawn_player, initial_grab_cursor),

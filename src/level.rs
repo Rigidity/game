@@ -120,7 +120,7 @@ fn start_chunk_generation(
     runtime: Res<TokioTasksRuntime>,
     generator: Res<LevelGenerator>,
 ) {
-    let texture_array = texture_array.0.clone();
+    let texture_array = texture_array.clone();
     let db = db.0.clone();
     let mut generator = generator.clone();
 
@@ -239,7 +239,8 @@ fn start_chunk_generation(
                         ctx.world
                             .resource_mut::<Assets<VoxelMaterial>>()
                             .add(VoxelMaterial {
-                                array_texture: texture_array.clone(),
+                                array_texture: texture_array.textures.clone(),
+                                destroy_texture: texture_array.destroy.clone(),
                                 block_interaction: BlockInteraction::default(),
                             });
 

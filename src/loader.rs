@@ -55,10 +55,65 @@ pub struct ImageAssets {
     pub sand: Handle<Image>,
     #[asset(path = "Voxels/Water.png")]
     pub water: Handle<Image>,
+
+    #[asset(path = "Destroy/stage_0.png")]
+    pub destroy_stage_0: Handle<Image>,
+    #[asset(path = "Destroy/stage_1.png")]
+    pub destroy_stage_1: Handle<Image>,
+    #[asset(path = "Destroy/stage_2.png")]
+    pub destroy_stage_2: Handle<Image>,
+    #[asset(path = "Destroy/stage_3.png")]
+    pub destroy_stage_3: Handle<Image>,
+    #[asset(path = "Destroy/stage_4.png")]
+    pub destroy_stage_4: Handle<Image>,
+    #[asset(path = "Destroy/stage_5.png")]
+    pub destroy_stage_5: Handle<Image>,
+    #[asset(path = "Destroy/stage_6.png")]
+    pub destroy_stage_6: Handle<Image>,
+    #[asset(path = "Destroy/stage_7.png")]
+    pub destroy_stage_7: Handle<Image>,
+    #[asset(path = "Destroy/stage_8.png")]
+    pub destroy_stage_8: Handle<Image>,
+    #[asset(path = "Destroy/stage_9.png")]
+    pub destroy_stage_9: Handle<Image>,
+}
+
+impl ImageAssets {
+    pub fn textures(&self) -> Vec<Handle<Image>> {
+        vec![
+            self.rock.clone(),
+            self.dirt.clone(),
+            self.grass_side.clone(),
+            self.grass.clone(),
+            self.leaves.clone(),
+            self.wood_side.clone(),
+            self.wood.clone(),
+            self.sand.clone(),
+            self.water.clone(),
+        ]
+    }
+
+    pub fn destroy(&self) -> Vec<Handle<Image>> {
+        vec![
+            self.destroy_stage_0.clone(),
+            self.destroy_stage_1.clone(),
+            self.destroy_stage_2.clone(),
+            self.destroy_stage_3.clone(),
+            self.destroy_stage_4.clone(),
+            self.destroy_stage_5.clone(),
+            self.destroy_stage_6.clone(),
+            self.destroy_stage_7.clone(),
+            self.destroy_stage_8.clone(),
+            self.destroy_stage_9.clone(),
+        ]
+    }
 }
 
 #[derive(Debug, Clone, Resource)]
-pub struct GlobalTextureArray(pub Handle<Image>);
+pub struct GlobalTextureArray {
+    pub textures: Handle<Image>,
+    pub destroy: Handle<Image>,
+}
 
 #[derive(Debug, Default, Clone, Copy, ShaderType)]
 pub struct BlockInteraction {
@@ -70,12 +125,12 @@ pub struct BlockInteraction {
 }
 
 impl BlockInteraction {
-    pub fn set(&mut self, pos: LocalPos, face: VoxelFace) {
+    pub fn set(&mut self, pos: LocalPos, face: VoxelFace, value: u32) {
         self.x = pos.x as u32;
         self.y = pos.y as u32;
         self.z = pos.z as u32;
         self.face = face as u32;
-        self.value = 1;
+        self.value = value;
     }
 
     pub fn unset(&mut self) {
@@ -92,7 +147,10 @@ pub struct VoxelMaterial {
     #[texture(0, dimension = "2d_array")]
     #[sampler(1)]
     pub array_texture: Handle<Image>,
-    #[uniform(2)]
+    #[texture(2, dimension = "2d_array")]
+    #[sampler(3)]
+    pub destroy_texture: Handle<Image>,
+    #[uniform(4)]
     pub block_interaction: BlockInteraction,
 }
 
@@ -142,23 +200,10 @@ fn setup_global_texture_array(
     image_assets: Res<ImageAssets>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    let array_texture = create_texture_array(
-        vec![
-            image_assets.rock.clone(),
-            image_assets.dirt.clone(),
-            image_assets.grass_side.clone(),
-            image_assets.grass.clone(),
-            image_assets.leaves.clone(),
-            image_assets.wood_side.clone(),
-            image_assets.wood.clone(),
-            image_assets.sand.clone(),
-            image_assets.water.clone(),
-        ],
-        &mut images,
-    )
-    .unwrap();
+    let textures = create_texture_array(image_assets.textures(), &mut images).unwrap();
+    let destroy = create_texture_array(image_assets.destroy(), &mut images).unwrap();
 
-    commands.insert_resource(GlobalTextureArray(array_texture));
+    commands.insert_resource(GlobalTextureArray { textures, destroy });
 }
 
 fn create_texture_array(
