@@ -67,7 +67,32 @@ fn check_overlap_except(current: &Aabb, other: &Aabb, axis: usize) -> bool {
     }
 }
 
-fn clip_axis(current_aabb: &Aabb, blocks: &[Aabb], mut delta: f32, axis: usize) -> f32 {
+fn clip_axis(current_aabb: &mut Aabb, blocks: &[Aabb], delta: f32, axis: usize) -> f32 {
+    // Do continuous collision check for any fast movement
+    if delta.abs() > 1.0 {
+        let steps = delta.abs().ceil() as i32;
+        let step_size = delta / steps as f32;
+
+        for _ in 0..steps {
+            let small_delta = clip_axis_internal(current_aabb, blocks, step_size, axis);
+            if small_delta != step_size {
+                return small_delta;
+            }
+            // Move AABB for next iteration
+            match axis {
+                0 => current_aabb.translate(Vec3::new(small_delta, 0.0, 0.0)),
+                1 => current_aabb.translate(Vec3::new(0.0, small_delta, 0.0)),
+                2 => current_aabb.translate(Vec3::new(0.0, 0.0, small_delta)),
+                _ => {}
+            }
+        }
+        return delta;
+    }
+
+    clip_axis_internal(current_aabb, blocks, delta, axis)
+}
+
+fn clip_axis_internal(current_aabb: &Aabb, blocks: &[Aabb], mut delta: f32, axis: usize) -> f32 {
     for block in blocks {
         // Only check collision if we overlap on other axes
         if !check_overlap_except(current_aabb, block, axis) {
@@ -128,15 +153,15 @@ fn apply_physics(
     let blocks = get_potential_collisions(&level, &player_aabb);
 
     // Y movement first
-    movement.y = clip_axis(&player_aabb, &blocks, movement.y, 1);
+    movement.y = clip_axis(&mut player_aabb, &blocks, movement.y, 1);
     player_aabb.translate(Vec3::new(0.0, movement.y, 0.0));
 
     // Then X
-    movement.x = clip_axis(&player_aabb, &blocks, movement.x, 0);
+    movement.x = clip_axis(&mut player_aabb, &blocks, movement.x, 0);
     player_aabb.translate(Vec3::new(movement.x, 0.0, 0.0));
 
     // Finally Z
-    movement.z = clip_axis(&player_aabb, &blocks, movement.z, 2);
+    movement.z = clip_axis(&mut player_aabb, &blocks, movement.z, 2);
     player_aabb.translate(Vec3::new(0.0, 0.0, movement.z));
 
     // Update ground state based on blocked downward movement
