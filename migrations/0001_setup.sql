@@ -16,4 +16,4 @@ CREATE TABLE player (
     yaw REAL NOT NULL
 );
 
-INSERT INTO player (x, y, z, roll, pitch, yaw) VALUES (0, 0, 0, 0, 0, 0);
+INSERT INTO player (x, y, z, roll, pitch, yaw) VALUES (0, 5, 0, 0, 0, 0);

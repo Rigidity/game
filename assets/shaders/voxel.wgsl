@@ -109,9 +109,15 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let ao_factor = mix(0.3, 1.0, in.ao);
     let texture_sample = textureSample(array_texture, array_texture_sampler, in.uv, i32(in.tex_index));
+
+    var destroy_overlay = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    if (in.interaction > 1u) {
+        let destroy_stage = in.interaction - 2u;
+        destroy_overlay = textureSample(destroy_texture, destroy_texture_sampler, in.uv, i32(destroy_stage));
+    }
     
     // Discard fully transparent pixels
-    if (texture_sample.a <= 0.1) {
+    if (texture_sample.a <= 0.1 && destroy_overlay.a <= 0.1) {
         discard;
     }
     
@@ -123,13 +129,11 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // Apply destroy texture overlay if block is being broken
     if (in.interaction > 0u) {
          // Create a slower, more obvious pulsating effect
-        let pulse = (sin(globals.time * 4.0) * 0.1) + 0.8;
+        let pulse = (sin(globals.time * 4.0) * 0.1) + 1.1;
         let interaction_factor = select(pulse, 1.0, in.interaction == 0u);
         final_color = final_color * ao_factor * interaction_factor;
 
         if (in.interaction > 1u) {
-            let destroy_stage = in.interaction - 2u;  // Convert to 0-10 range
-            let destroy_overlay = textureSample(destroy_texture, destroy_texture_sampler, in.uv, i32(destroy_stage));
             // Blend colors taking alpha into account
             final_color = final_color * (1.0 - destroy_overlay.a) + destroy_overlay.rgb * destroy_overlay.a;
         }

@@ -12,7 +12,7 @@ use crate::{
     voxel_mesh::VoxelFace,
 };
 
-use super::{Player, PlayerCamera};
+use super::{inventory::Inventory, Player, PlayerCamera};
 
 const MAX_REACH: f32 = 5.0;
 const BLOCK_BREAK_TIME: f32 = 0.5; // Time in seconds to break a block
@@ -161,6 +161,7 @@ pub fn break_or_place_block(
     focused_block: Res<FocusedBlock>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
     mut level: ResMut<Level>,
+    mut inventory: ResMut<Inventory>,
     mut break_progress: ResMut<BlockBreakProgress>,
     mut commands: Commands,
 ) {
@@ -174,6 +175,11 @@ pub fn break_or_place_block(
 
     if mouse.pressed(MouseButton::Left) {
         if let Some(block_pos) = focused_block.block_pos {
+            if !level.block(block_pos).is_breakable_by_fist() {
+                break_progress.progress = 0.0;
+                return;
+            }
+
             if break_progress.position != Some(block_pos) {
                 break_progress.position = Some(block_pos);
                 break_progress.progress = 0.0;
@@ -184,6 +190,10 @@ pub fn break_or_place_block(
             if break_progress.progress >= 1.0 {
                 let chunk_pos = block_pos.chunk_pos();
                 let local_pos = block_pos.local_pos();
+
+                for drop in level.block(block_pos).drops() {
+                    inventory.add(drop, 1);
+                }
 
                 if let Some(chunk) = level.chunk_mut(chunk_pos) {
                     chunk.set(local_pos, Block::Air);

@@ -67,7 +67,7 @@ impl LevelGenerator {
             pos.z as f64 * 0.03,
         ]) * 0.5;
 
-        combined + cave_noise
+        combined + cave_noise + pos.y as f64 * 0.0001
     }
 
     fn get_terrain_density(&self, pos: &Vec3) -> f64 {
@@ -181,7 +181,18 @@ impl LevelGenerator {
 
                         let block_type = if distance_to_surface == 1 {
                             if moisture > 0.3 {
-                                Block::Grass
+                                // Create patches of gravel on the surface
+                                let gravel_noise = self.terrain_noise.get([
+                                    pos.x as f64 * 0.08, // Slightly larger patches
+                                    pos.y as f64 * 0.08,
+                                    pos.z as f64 * 0.08,
+                                ]);
+
+                                if gravel_noise > 0.6 {
+                                    Block::Gravel
+                                } else {
+                                    Block::Grass
+                                }
                             } else {
                                 Block::Sand
                             }

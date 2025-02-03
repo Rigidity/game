@@ -21,7 +21,7 @@ struct PositionText;
 #[derive(Debug, Clone, Copy, Component)]
 struct FpsText;
 
-fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup_ui(mut commands: Commands) {
     commands.spawn((
         PositionText,
         Text::new("0, 0, 0"),
@@ -38,18 +38,6 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
         Node {
             left: Val::Px(5.0),
             top: Val::Px(25.0),
-            ..default()
-        },
-    ));
-
-    commands.spawn((
-        ImageNode::new(asset_server.load("Items/Wood.png")),
-        Node {
-            position_type: PositionType::Absolute,
-            right: Val::Px(20.0),
-            bottom: Val::Px(20.0),
-            width: Val::Px(32.0),
-            height: Val::Px(32.0),
             ..default()
         },
     ));

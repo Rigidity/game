@@ -1,5 +1,7 @@
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
+use crate::item::Item;
 use crate::level::Level;
 use crate::position::BlockPos;
 use crate::voxel_mesh::{VoxelFace, VoxelMesh};
@@ -40,9 +42,56 @@ pub enum Block {
     Wood,
     Sand,
     Water,
+    Gravel,
 }
 
 impl Block {
+    pub fn drops(&self) -> Vec<Item> {
+        let mut rng = rand::rng();
+
+        match self {
+            Self::Leaves => {
+                let mut drops = Vec::new();
+
+                if rng.random_bool(0.1) {
+                    drops.push(Item::Twig);
+                }
+
+                if rng.random_bool(0.025) {
+                    drops.push(Item::PlantFiber);
+                }
+
+                drops
+            }
+            Self::Grass => {
+                let mut drops = Vec::new();
+
+                if rng.random_bool(0.1) {
+                    drops.push(Item::PlantFiber);
+                }
+
+                drops
+            }
+            Self::Gravel => {
+                let mut drops = Vec::new();
+
+                if rng.random_bool(0.1) {
+                    drops.push(Item::Flint);
+                }
+
+                drops
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    pub fn is_breakable_by_fist(self) -> bool {
+        match self {
+            Self::Dirt | Self::Grass | Self::Sand | Self::Gravel | Self::Leaves => true,
+            Self::Air | Self::Rock | Self::Wood | Self::Water => false,
+        }
+    }
+
     pub fn is_solid(self) -> bool {
         !matches!(self, Self::Air | Self::Leaves | Self::Water)
     }
@@ -80,6 +129,7 @@ impl Block {
                         (Self::Wood, _) => 5,
                         (Self::Sand, _) => 7,
                         (Self::Water, _) => 8,
+                        (Self::Gravel, _) => 9,
                     },
                 );
             }

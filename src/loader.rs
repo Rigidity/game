@@ -55,6 +55,8 @@ pub struct ImageAssets {
     pub sand: Handle<Image>,
     #[asset(path = "Voxels/Water.png")]
     pub water: Handle<Image>,
+    #[asset(path = "Voxels/Gravel.png")]
+    pub gravel: Handle<Image>,
 
     #[asset(path = "Destroy/stage_0.png")]
     pub destroy_stage_0: Handle<Image>,
@@ -90,6 +92,7 @@ impl ImageAssets {
             self.wood.clone(),
             self.sand.clone(),
             self.water.clone(),
+            self.gravel.clone(),
         ]
     }
 
