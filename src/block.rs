@@ -64,7 +64,7 @@ impl Block {
                 drops
             }
             Self::Grass => {
-                let mut drops = Vec::new();
+                let mut drops = vec![Item::Soil];
 
                 if rng.random_bool(0.1) {
                     drops.push(Item::PlantFiber);
@@ -81,6 +81,7 @@ impl Block {
 
                 drops
             }
+            Self::Dirt => vec![Item::Soil],
             _ => Vec::new(),
         }
     }

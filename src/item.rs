@@ -3,14 +3,51 @@ pub enum Item {
     Twig,
     PlantFiber,
     Flint,
+    Soil,
+    Handle(HandleMaterial),
+    Binding(BindingMaterial),
+    HatchetHead(HeadMaterial),
+    Hatchet {
+        handle: HandleMaterial,
+        binding: BindingMaterial,
+        head: HeadMaterial,
+    },
 }
 
 impl Item {
     pub fn get_texture_path(&self) -> &'static str {
         match self {
-            Item::Twig => "Items/Twig.png",
-            Item::PlantFiber => "Items/PlantFiber.png",
-            Item::Flint => "Items/Flint.png",
+            Item::Twig => "Items/Items - Twig.png",
+            Item::PlantFiber => "Items/Items - Plant Fiber.png",
+            Item::Flint => "Items/Items - Flint.png",
+            Item::Soil => "Items/Items - Soil.png",
+            Item::Handle(..) => "Items/Items - Handle.png",
+            Item::Binding(..) => "Items/Items - Binding.png",
+            Item::HatchetHead(..) => "Items/Items - Hatchet Head.png",
+            Item::Hatchet {
+                handle,
+                binding,
+                head,
+            } => match (handle, binding, head) {
+                (HandleMaterial::Wood, BindingMaterial::PlantFiber, HeadMaterial::Flint) => {
+                    "Items/Items - Hatchet.png"
+                }
+            },
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HandleMaterial {
+    Wood,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BindingMaterial {
+    PlantFiber,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HeadMaterial {
+    Flint,
 }

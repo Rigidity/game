@@ -164,6 +164,7 @@ pub fn break_or_place_block(
     mut inventory: ResMut<Inventory>,
     mut break_progress: ResMut<BlockBreakProgress>,
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
 ) {
     let Ok(window) = primary_window.get_single() else {
         return;
@@ -192,7 +193,7 @@ pub fn break_or_place_block(
                 let local_pos = block_pos.local_pos();
 
                 for drop in level.block(block_pos).drops() {
-                    inventory.add(drop, 1);
+                    inventory.add(drop, 1, &asset_server);
                 }
 
                 if let Some(chunk) = level.chunk_mut(chunk_pos) {

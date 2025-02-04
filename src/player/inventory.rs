@@ -4,14 +4,17 @@ use crate::item::Item;
 
 #[derive(Debug, Default, Clone, Resource)]
 pub struct Inventory {
-    items: HashMap<Item, usize>,
+    items: HashMap<Item, (usize, Handle<Image>)>,
     hotbar: [Option<Item>; 9],
     selected_slot: usize,
 }
 
 impl Inventory {
-    pub fn add(&mut self, item: Item, count: usize) {
-        *self.items.entry(item).or_insert(0) += count;
+    pub fn add(&mut self, item: Item, count: usize, asset_server: &AssetServer) {
+        self.items
+            .entry(item)
+            .or_insert((0, asset_server.load(item.get_texture_path())))
+            .0 += count;
 
         if self.hotbar.contains(&Some(item)) {
             return;
@@ -27,7 +30,13 @@ impl Inventory {
     }
 
     pub fn get_item_count(&self, item: &Item) -> usize {
-        *self.items.get(item).unwrap_or(&0)
+        self.items.get(item).map_or(0, |(count, _)| *count)
+    }
+
+    pub fn get_item_texture(&self, item: &Item) -> Handle<Image> {
+        self.items
+            .get(item)
+            .map_or(Handle::default(), |(_, texture)| texture.clone())
     }
 }
 
@@ -87,12 +96,13 @@ pub fn update_hotbar_display(
     for (slot_entity, mut image_node, hotbar_slot) in hotbar_slots.iter_mut() {
         if let Some(item) = inventory.get_hotbar_slot(hotbar_slot.0) {
             let item_count = inventory.get_item_count(&item);
+            let item_texture = inventory.get_item_texture(&item);
 
             // Spawn the item image and count inside the slot
             commands.entity(slot_entity).with_children(|parent| {
                 // Spawn item image
                 parent.spawn((
-                    ImageNode::new(asset_server.load(item.get_texture_path())),
+                    ImageNode::new(item_texture),
                     Node {
                         top: Val::Px(8.0),
                         left: Val::Px(8.0),
