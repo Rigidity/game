@@ -1,4 +1,8 @@
-use bevy::{prelude::*, utils::HashMap};
+use bevy::{
+    prelude::*,
+    utils::HashMap,
+    window::{CursorGrabMode, PrimaryWindow},
+};
 
 use crate::{game_state::GameState, item::Item, player::Player, position::BlockPos};
 
@@ -8,12 +12,14 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Inventory>()
+            .add_systems(OnEnter(GameState::Setup), initial_grab_cursor)
             .add_systems(OnEnter(GameState::Playing), (setup_ui, spawn_inventory))
             .add_systems(
                 Update,
                 (
                     update_position_text,
                     update_fps_text,
+                    toggle_grab,
                     (update_hotbar_display, set_hotbar_slot).chain(),
                 )
                     .run_if(in_state(GameState::Playing)),
@@ -64,6 +70,37 @@ fn update_fps_text(time: Res<Time>, mut text_query: Query<&mut Text, With<FpsTex
     let fps = 1.0 / time.delta_secs();
     let mut text = text_query.single_mut();
     text.0 = format!("FPS: {:.1}", fps);
+}
+
+pub fn initial_grab_cursor(mut primary_window: Query<&mut Window, With<PrimaryWindow>>) {
+    let Ok(mut window) = primary_window.get_single_mut() else {
+        warn!("Primary window not found, cursor grab will not be enabled");
+        return;
+    };
+    set_grab(&mut window, true);
+}
+
+pub fn toggle_grab(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut primary_window: Query<&mut Window, With<PrimaryWindow>>,
+) {
+    if !keys.just_pressed(KeyCode::Escape) {
+        return;
+    }
+
+    let mut window = primary_window.single_mut();
+
+    let should_grab = window.cursor_options.grab_mode == CursorGrabMode::None;
+    set_grab(&mut window, should_grab);
+}
+
+fn set_grab(window: &mut Window, grab: bool) {
+    window.cursor_options.grab_mode = if grab {
+        CursorGrabMode::Confined
+    } else {
+        CursorGrabMode::None
+    };
+    window.cursor_options.visible = !grab;
 }
 
 #[derive(Debug, Default, Clone, Resource)]

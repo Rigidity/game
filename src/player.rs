@@ -1,11 +1,9 @@
-mod cursor;
 mod interaction;
 mod movement;
 
 use bevy::prelude::*;
-use cursor::{initial_grab_cursor, player_look, toggle_grab};
 use interaction::{break_or_place_block, update_focused_block, BlockBreakProgress, FocusedBlock};
-use movement::player_move;
+use movement::{player_look, player_move};
 
 use crate::{game_state::GameState, physics::Velocity};
 
@@ -16,14 +14,12 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FocusedBlock>()
             .init_resource::<BlockBreakProgress>()
-            .add_systems(
-                OnEnter(GameState::Setup),
-                (spawn_player, initial_grab_cursor),
-            )
+            .add_systems(OnEnter(GameState::Setup), spawn_player)
             .add_systems(
                 Update,
                 (
-                    (player_look, toggle_grab, player_move),
+                    player_look,
+                    player_move,
                     update_focused_block,
                     break_or_place_block,
                 )

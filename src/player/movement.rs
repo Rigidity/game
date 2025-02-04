@@ -1,4 +1,5 @@
 use bevy::{
+    input::mouse::MouseMotion,
     prelude::*,
     window::{CursorGrabMode, PrimaryWindow},
 };
@@ -67,5 +68,32 @@ pub fn player_move(
             .0
             .z
             .lerp(target_velocity.z, acceleration * time.delta_secs());
+    }
+}
+
+pub fn player_look(
+    primary_window: Query<&Window, With<PrimaryWindow>>,
+    mut state: EventReader<MouseMotion>,
+    mut camera: Query<&mut Transform, With<PlayerCamera>>,
+) {
+    let window = primary_window.single();
+
+    if window.cursor_options.grab_mode == CursorGrabMode::None {
+        return;
+    };
+
+    let mut transform = camera.single_mut();
+
+    const MOUSE_SENSITIVITY: f32 = 0.09;
+
+    for ev in state.read() {
+        let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
+
+        pitch -= (MOUSE_SENSITIVITY * ev.delta.y).to_radians();
+        yaw -= (MOUSE_SENSITIVITY * ev.delta.x).to_radians();
+
+        let yaw_rotation = Quat::from_axis_angle(Vec3::Y, yaw);
+        let pitch_rotation = Quat::from_axis_angle(Vec3::X, pitch.clamp(-1.54, 1.54));
+        transform.rotation = yaw_rotation * pitch_rotation;
     }
 }
