@@ -9,10 +9,11 @@ use crate::{
     level::{Dirty, Level, Modified},
     loader::VoxelMaterial,
     position::{BlockPos, ChunkPos, LocalPos, CHUNK_SIZE},
+    ui::Inventory,
     voxel_mesh::VoxelFace,
 };
 
-use super::{inventory::Inventory, Player, PlayerCamera};
+use super::{Player, PlayerCamera};
 
 const MAX_REACH: f32 = 5.0;
 const BLOCK_BREAK_TIME: f32 = 0.5; // Time in seconds to break a block
