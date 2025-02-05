@@ -4,9 +4,9 @@ use crate::{item::Item, player::Player, position::BlockPos};
 
 #[derive(Debug, Default, Clone, Resource)]
 pub struct Inventory {
-    items: HashMap<Item, (usize, Handle<Image>)>,
-    hotbar: [Option<Item>; 9],
-    selected_slot: usize,
+    pub items: HashMap<Item, (usize, Handle<Image>)>,
+    pub hotbar: [Option<Item>; 9],
+    pub selected_slot: usize,
 }
 
 impl Inventory {
@@ -25,18 +25,22 @@ impl Inventory {
         }
     }
 
-    fn get_hotbar_slot(&self, slot: usize) -> Option<Item> {
+    pub fn get_hotbar_slot(&self, slot: usize) -> Option<Item> {
         self.hotbar.get(slot).copied().flatten()
     }
 
-    fn get_item_count(&self, item: &Item) -> usize {
+    pub fn get_item_count(&self, item: &Item) -> usize {
         self.items.get(item).map_or(0, |(count, _)| *count)
     }
 
-    fn get_item_texture(&self, item: &Item) -> Handle<Image> {
+    pub fn get_item_texture(&self, item: &Item) -> Handle<Image> {
         self.items
             .get(item)
             .map_or(Handle::default(), |(_, texture)| texture.clone())
+    }
+
+    pub fn items(&self) -> impl Iterator<Item = &Item> + Clone {
+        self.items.keys()
     }
 }
 
@@ -146,6 +150,10 @@ pub fn update_hotbar_display(
     mut hotbar_slots: Query<(Entity, &mut ImageNode, &HotbarSlot)>,
     item_displays: Query<Entity, With<ItemDisplay>>,
 ) {
+    if !inventory.is_changed() {
+        return;
+    }
+
     // Remove existing item displays
     for entity in item_displays.iter() {
         commands.entity(entity).despawn();

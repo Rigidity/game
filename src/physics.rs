@@ -148,6 +148,10 @@ fn apply_physics(
     level: Res<Level>,
     mut query: Query<(&mut Transform, &mut Velocity, &mut Player)>,
 ) {
+    if time.elapsed_secs() < 0.25 {
+        return;
+    }
+
     let (mut transform, mut velocity, mut player) = query.single_mut();
     let dt = time.delta_secs();
 

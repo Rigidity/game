@@ -16,6 +16,7 @@ use crate::{
     loader::{BlockInteraction, GlobalTextureArray, VoxelMaterial},
     player::{Player, PlayerCamera},
     position::{BlockPos, ChunkPos},
+    ui::Inventory,
 };
 
 const CHUNK_UNLOAD_DISTANCE: i32 = 10; // Should be larger than generation radius
@@ -311,7 +312,7 @@ fn start_saving(db: Res<LevelDatabase>, runtime: Res<TokioTasksRuntime>) {
     let db = db.0.clone();
 
     runtime.spawn_background_task(move |mut ctx| async move {
-        let player = sqlx::query!("SELECT x, y, z, roll, pitch, yaw FROM player")
+        let player = sqlx::query!("SELECT x, y, z, roll, pitch, yaw, inventory_slot FROM player")
             .fetch_one(&db)
             .await
             .unwrap();
@@ -324,20 +325,56 @@ fn start_saving(db: Res<LevelDatabase>, runtime: Res<TokioTasksRuntime>) {
             player.yaw as f32,
         );
 
+        let rows = sqlx::query!("SELECT item, count FROM inventory")
+            .fetch_all(&db)
+            .await
+            .unwrap();
+
+        let hotbar_rows = sqlx::query!("SELECT slot, item FROM hotbar")
+            .fetch_all(&db)
+            .await
+            .unwrap();
+
         ctx.run_on_main_thread(move |ctx| {
             ctx.world
                 .query_filtered::<&mut Transform, With<Player>>()
                 .single_mut(ctx.world)
                 .translation = player_pos;
+
             ctx.world
                 .query_filtered::<&mut Transform, With<PlayerCamera>>()
                 .single_mut(ctx.world)
                 .rotation = player_rotation;
+
+            let asset_server = ctx.world.resource::<AssetServer>();
+
+            let mut inventory = Inventory {
+                selected_slot: player.inventory_slot as usize,
+                ..Default::default()
+            };
+
+            for row in rows {
+                inventory.add(
+                    bincode::deserialize(&row.item).unwrap(),
+                    row.count as usize,
+                    asset_server,
+                );
+            }
+
+            for row in hotbar_rows {
+                let Some(item) = row.item else {
+                    continue;
+                };
+
+                inventory.hotbar[row.slot as usize] = Some(bincode::deserialize(&item).unwrap());
+            }
+
+            ctx.world.insert_resource(inventory);
         })
         .await;
 
         loop {
-            let (chunks_to_save, player_pos, player_rotation) = ctx
+            let (chunks_to_save, player_pos, player_rotation, inventory) = ctx
                 .run_on_main_thread(|ctx| {
                     let modified: Vec<(Entity, ChunkPos)> = ctx
                         .world
@@ -370,7 +407,9 @@ fn start_saving(db: Res<LevelDatabase>, runtime: Res<TokioTasksRuntime>) {
                         .rotation
                         .to_euler(EulerRot::XYZ);
 
-                    (chunks, player_pos, player_rotation)
+                    let inventory = ctx.world.resource::<Inventory>();
+
+                    (chunks, player_pos, player_rotation, inventory.clone())
                 })
                 .await;
 
@@ -389,20 +428,57 @@ fn start_saving(db: Res<LevelDatabase>, runtime: Res<TokioTasksRuntime>) {
                 .unwrap();
             }
 
+            let slot = inventory.selected_slot as i64;
+
             sqlx::query!(
-                "UPDATE player SET x = ?, y = ?, z = ?, roll = ?, pitch = ?, yaw = ?",
+                "
+                UPDATE player SET
+                    x = ?, y = ?, z = ?,
+                    roll = ?, pitch = ?, yaw = ?,
+                    inventory_slot = ?
+                ",
                 player_pos.x,
                 player_pos.y,
                 player_pos.z,
                 player_rotation.0,
                 player_rotation.1,
-                player_rotation.2
+                player_rotation.2,
+                slot
             )
             .execute(&db)
             .await
             .unwrap();
 
-            sleep(Duration::from_millis(250)).await;
+            for (slot, item) in inventory.hotbar.iter().enumerate() {
+                let item = item.as_ref().map(|item| bincode::serialize(item).unwrap());
+                let slot = slot as i64;
+
+                sqlx::query!("UPDATE hotbar SET item = ? WHERE slot = ?", item, slot)
+                    .execute(&db)
+                    .await
+                    .unwrap();
+            }
+
+            sqlx::query!("DELETE FROM inventory")
+                .execute(&db)
+                .await
+                .unwrap();
+
+            for (item, (count, _)) in inventory.items {
+                let item = bincode::serialize(&item).unwrap();
+                let count = count as i64;
+
+                sqlx::query!(
+                    "INSERT INTO inventory (item, count) VALUES (?, ?)",
+                    item,
+                    count
+                )
+                .execute(&db)
+                .await
+                .unwrap();
+            }
+
+            sleep(Duration::from_millis(500)).await;
         }
     });
 }

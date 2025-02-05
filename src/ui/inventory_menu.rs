@@ -1,26 +1,63 @@
 use bevy::{prelude::*, window::PrimaryWindow};
+use itertools::Itertools;
 
-use super::{hud::Hud, set_grab};
+use super::{hud::Hud, set_grab, Inventory};
 
 #[derive(Debug, Clone, Copy, Component)]
-#[require(Node(inventory_menu_node))]
 pub struct InventoryMenu;
 
-fn inventory_menu_node() -> Node {
-    Node {
-        position_type: PositionType::Absolute,
-        top: Val::Px(0.0),
-        left: Val::Px(0.0),
-        width: Val::Percent(100.0),
-        height: Val::Percent(100.0),
-        ..default()
-    }
-}
+#[derive(Debug, Clone, Copy, Component)]
+pub struct InventoryItemList;
+
+#[derive(Debug, Clone, Copy, Component)]
+pub struct InventoryItem;
 
 pub fn setup_inventory_menu(mut commands: Commands) {
     commands
-        .spawn((InventoryMenu, Visibility::Hidden))
-        .with_children(|_menu| {});
+        .spawn((
+            InventoryMenu,
+            Visibility::Hidden,
+            Node {
+                position_type: PositionType::Absolute,
+                display: Display::Flex,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                top: Val::Px(0.0),
+                left: Val::Px(0.0),
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5)),
+        ))
+        .with_children(|menu| {
+            menu.spawn((
+                Node {
+                    padding: UiRect::all(Val::Px(16.0)),
+                    width: Val::Px(300.0),
+                    height: Val::Px(500.0),
+                    display: Display::Flex,
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
+                BorderRadius::all(Val::Px(8.0)),
+            ))
+            .with_child((
+                InventoryItemList,
+                Node {
+                    display: Display::Flex,
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(4.0),
+                    overflow: Overflow::scroll_y(),
+                    width: Val::Percent(100.0),
+                    height: Val::Auto,
+                    margin: UiRect::all(Val::Px(0.0)),
+                    ..default()
+                },
+            ));
+        });
 }
 
 pub fn toggle_inventory_menu(
@@ -28,6 +65,7 @@ pub fn toggle_inventory_menu(
     mut primary_window: Query<&mut Window, With<PrimaryWindow>>,
     mut inventory_menu: Query<&mut Visibility, (With<InventoryMenu>, Without<Hud>)>,
     mut hud: Query<&mut Visibility, (With<Hud>, Without<InventoryMenu>)>,
+    mut inventory_item_list: Query<&mut ScrollPosition, With<InventoryItemList>>,
 ) {
     let opening = keys.just_pressed(KeyCode::KeyI) && inventory_menu.single() == Visibility::Hidden;
     let closing = (keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyI))
@@ -55,4 +93,57 @@ pub fn toggle_inventory_menu(
     } else {
         Visibility::Hidden
     };
+
+    inventory_item_list.single_mut().offset_y = 0.0;
+}
+
+pub fn update_inventory_menu(
+    mut commands: Commands,
+    inventory: Res<Inventory>,
+    items: Query<Entity, With<InventoryItem>>,
+    item_list: Query<Entity, With<InventoryItemList>>,
+) {
+    if !inventory.is_changed() {
+        return;
+    }
+
+    for entity in items.iter() {
+        commands.entity(entity).despawn();
+    }
+
+    commands.entity(item_list.single()).with_children(|list| {
+        for item in inventory.items().sorted() {
+            list.spawn((
+                Node {
+                    display: Display::Flex,
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(8.0),
+                    width: Val::Percent(100.0),
+                    ..default()
+                },
+                PickingBehavior {
+                    should_block_lower: false,
+                    is_hoverable: true,
+                },
+            ))
+            .with_children(|row| {
+                row.spawn((
+                    InventoryItem,
+                    ImageNode::new(inventory.get_item_texture(item)),
+                    Node {
+                        width: Val::Px(32.0),
+                        height: Val::Px(32.0),
+                        ..default()
+                    },
+                    PickingBehavior::IGNORE,
+                ));
+
+                row.spawn((
+                    Text::new(inventory.get_item_count(item).to_string()),
+                    PickingBehavior::IGNORE,
+                ));
+            });
+        }
+    });
 }
