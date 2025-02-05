@@ -9,7 +9,7 @@ use bevy::{
 use hud::{
     set_hotbar_slot, spawn_hud, update_fps_text, update_hotbar_display, update_position_text,
 };
-use inventory_menu::setup_inventory_menu;
+use inventory_menu::{setup_inventory_menu, toggle_inventory_menu};
 use pause_menu::{setup_pause_menu, toggle_pause_menu};
 
 use crate::game_state::{is_unpaused, GameState};
@@ -37,6 +37,7 @@ impl Plugin for UiPlugin {
                     update_position_text,
                     update_fps_text,
                     (update_hotbar_display, set_hotbar_slot).chain(),
+                    toggle_inventory_menu,
                 )
                     .run_if(in_state(GameState::Playing).and(is_unpaused)),
             );
@@ -52,10 +53,10 @@ fn initial_grab_cursor(mut primary_window: Query<&mut Window, With<PrimaryWindow
 }
 
 fn set_grab(window: &mut Window, grab: bool) {
-    window.set_cursor_position(Some(window.size() / 2.0));
     window.cursor_options.grab_mode = if grab {
         CursorGrabMode::Confined
     } else {
+        window.set_cursor_position(Some(window.size() / 2.0));
         CursorGrabMode::None
     };
     window.cursor_options.visible = !grab;
