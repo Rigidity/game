@@ -16,6 +16,7 @@ mod voxel_mesh;
 
 use bevy::prelude::*;
 use bevy_tokio_tasks::TokioTasksPlugin;
+use game_state::{GameState, Paused};
 use level::LevelPlugin;
 use loader::LoaderPlugin;
 use physics::PhysicsPlugin;
@@ -33,6 +34,8 @@ fn main() {
             PhysicsPlugin,
             UiPlugin,
         ))
+        .init_state::<GameState>()
+        .init_resource::<Paused>()
         .insert_resource(ClearColor(Color::linear_rgb(0.3, 0.6, 0.9)))
         .run();
 }

@@ -12,7 +12,7 @@ use tokio::time::sleep;
 use crate::{
     block::Block,
     chunk::Chunk,
-    game_state::GameState,
+    game_state::{is_unpaused, GameState},
     loader::{BlockInteraction, GlobalTextureArray, VoxelMaterial},
     player::{Player, PlayerCamera},
     position::{BlockPos, ChunkPos},
@@ -38,7 +38,7 @@ impl Plugin for LevelPlugin {
                 Update,
                 (build_chunk_meshes, unload_distant_chunks)
                     .chain()
-                    .run_if(in_state(GameState::Playing)),
+                    .run_if(in_state(GameState::Playing).and(is_unpaused)),
             );
     }
 }

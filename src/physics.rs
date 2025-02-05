@@ -1,4 +1,10 @@
-use crate::{aabb::Aabb, game_state::GameState, level::Level, player::Player, position::BlockPos};
+use crate::{
+    aabb::Aabb,
+    game_state::{is_unpaused, GameState},
+    level::Level,
+    player::Player,
+    position::BlockPos,
+};
 use bevy::prelude::*;
 
 #[derive(Debug, Clone, Copy)]
@@ -6,7 +12,10 @@ pub struct PhysicsPlugin;
 
 impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, apply_physics.run_if(in_state(GameState::Playing)));
+        app.add_systems(
+            Update,
+            apply_physics.run_if(in_state(GameState::Playing).and(is_unpaused)),
+        );
     }
 }
 
