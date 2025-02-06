@@ -86,6 +86,11 @@ impl Block {
                 Item::Handle(HandleMaterial::Twig),
                 Item::PickaxeHead(HeadMaterial::Flint),
                 Item::Binding(BindingMaterial::PlantFiber),
+                Item::Pickaxe {
+                    handle: HandleMaterial::Twig,
+                    binding: BindingMaterial::PlantFiber,
+                    head: HeadMaterial::Flint,
+                },
             ],
             _ => Vec::new(),
         }
