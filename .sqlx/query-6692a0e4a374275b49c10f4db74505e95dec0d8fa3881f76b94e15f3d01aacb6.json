@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT x, y, z, roll, pitch, yaw, inventory_slot FROM player",
+  "describe": {
+    "columns": [
+      {
+        "name": "x",
+        "ordinal": 0,
+        "type_info": "Float"
+      },
+      {
+        "name": "y",
+        "ordinal": 1,
+        "type_info": "Float"
+      },
+      {
+        "name": "z",
+        "ordinal": 2,
+        "type_info": "Float"
+      },
+      {
+        "name": "roll",
+        "ordinal": 3,
+        "type_info": "Float"
+      },
+      {
+        "name": "pitch",
+        "ordinal": 4,
+        "type_info": "Float"
+      },
+      {
+        "name": "yaw",
+        "ordinal": 5,
+        "type_info": "Float"
+      },
+      {
+        "name": "inventory_slot",
+        "ordinal": 6,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "6692a0e4a374275b49c10f4db74505e95dec0d8fa3881f76b94e15f3d01aacb6"
+}

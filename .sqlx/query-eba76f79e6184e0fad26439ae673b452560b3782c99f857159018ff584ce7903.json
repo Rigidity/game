@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                UPDATE player SET\n                    x = ?, y = ?, z = ?,\n                    roll = ?, pitch = ?, yaw = ?,\n                    inventory_slot = ?\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "eba76f79e6184e0fad26439ae673b452560b3782c99f857159018ff584ce7903"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE hotbar SET item = ? WHERE slot = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "a9515dc77e1f4d7ecb8a51961b9b3fda590cf6baf4a854f5d33998d77af08b7c"
+}

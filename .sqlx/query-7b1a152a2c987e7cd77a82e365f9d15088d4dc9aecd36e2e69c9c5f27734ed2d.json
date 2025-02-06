@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT item, count FROM inventory",
+  "describe": {
+    "columns": [
+      {
+        "name": "item",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "count",
+        "ordinal": 1,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "7b1a152a2c987e7cd77a82e365f9d15088d4dc9aecd36e2e69c9c5f27734ed2d"
+}

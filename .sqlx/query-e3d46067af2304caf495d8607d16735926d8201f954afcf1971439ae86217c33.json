@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT slot, item FROM hotbar",
+  "describe": {
+    "columns": [
+      {
+        "name": "slot",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "item",
+        "ordinal": 1,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "e3d46067af2304caf495d8607d16735926d8201f954afcf1971439ae86217c33"
+}
