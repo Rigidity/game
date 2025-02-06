@@ -1,7 +1,7 @@
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::item::Item;
+use crate::item::{BindingMaterial, HandleMaterial, HeadMaterial, Item};
 use crate::level::Level;
 use crate::position::BlockPos;
 use crate::voxel_mesh::{VoxelFace, VoxelMesh};
@@ -82,6 +82,11 @@ impl Block {
                 drops
             }
             Self::Dirt => vec![Item::Soil],
+            Self::Sand => vec![
+                Item::Handle(HandleMaterial::Twig),
+                Item::PickaxeHead(HeadMaterial::Flint),
+                Item::Binding(BindingMaterial::PlantFiber),
+            ],
             _ => Vec::new(),
         }
     }

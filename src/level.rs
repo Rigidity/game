@@ -346,19 +346,13 @@ fn start_saving(db: Res<LevelDatabase>, runtime: Res<TokioTasksRuntime>) {
                 .single_mut(ctx.world)
                 .rotation = player_rotation;
 
-            let asset_server = ctx.world.resource::<AssetServer>();
-
             let mut inventory = Inventory {
                 selected_slot: player.inventory_slot as usize,
                 ..Default::default()
             };
 
             for row in rows {
-                inventory.add(
-                    bincode::deserialize(&row.item).unwrap(),
-                    row.count as usize,
-                    asset_server,
-                );
+                inventory.add(bincode::deserialize(&row.item).unwrap(), row.count as usize);
             }
 
             for row in hotbar_rows {
@@ -464,7 +458,7 @@ fn start_saving(db: Res<LevelDatabase>, runtime: Res<TokioTasksRuntime>) {
                 .await
                 .unwrap();
 
-            for (item, (count, _)) in inventory.items {
+            for (item, count) in inventory.items {
                 let item = bincode::serialize(&item).unwrap();
                 let count = count as i64;
 

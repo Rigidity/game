@@ -1,7 +1,9 @@
 use bevy::{prelude::*, window::PrimaryWindow};
 use itertools::Itertools;
 
-use super::{set_grab, Inventory};
+use crate::loader::ItemImages;
+
+use super::{set_grab, Inventory, ItemImageCache};
 
 #[derive(Debug, Clone, Copy, Component)]
 pub struct InventoryMenu;
@@ -66,8 +68,8 @@ pub fn toggle_inventory_menu(
     mut inventory_menu: Query<&mut Visibility, With<InventoryMenu>>,
     mut inventory_item_list: Query<&mut ScrollPosition, With<InventoryItemList>>,
 ) {
-    let opening = keys.just_pressed(KeyCode::KeyI) && inventory_menu.single() == Visibility::Hidden;
-    let closing = (keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyI))
+    let opening = keys.just_pressed(KeyCode::KeyE) && inventory_menu.single() == Visibility::Hidden;
+    let closing = (keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyE))
         && inventory_menu.single() != Visibility::Hidden;
 
     if !opening && !closing {
@@ -92,6 +94,9 @@ pub fn toggle_inventory_menu(
 pub fn update_inventory_menu(
     mut commands: Commands,
     inventory: Res<Inventory>,
+    item_images: Res<ItemImages>,
+    mut item_image_cache: ResMut<ItemImageCache>,
+    mut images: ResMut<Assets<Image>>,
     items: Query<Entity, With<InventoryItem>>,
     item_list: Query<Entity, With<InventoryItemList>>,
 ) {
@@ -104,14 +109,16 @@ pub fn update_inventory_menu(
     }
 
     commands.entity(item_list.single()).with_children(|list| {
-        for item in inventory.items().sorted() {
+        for &item in inventory.items().sorted() {
+            let item_texture = item_image_cache.get(item, &mut images, &item_images);
+
             list.spawn((
                 InventoryItem,
                 Node {
                     display: Display::Flex,
                     flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
-                    column_gap: Val::Px(8.0),
+                    column_gap: Val::Px(4.0),
                     width: Val::Percent(100.0),
                     ..default()
                 },
@@ -122,7 +129,7 @@ pub fn update_inventory_menu(
             ))
             .with_children(|row| {
                 row.spawn((
-                    ImageNode::new(inventory.get_item_texture(item)),
+                    ImageNode::new(item_texture),
                     Node {
                         width: Val::Px(32.0),
                         height: Val::Px(32.0),
@@ -132,7 +139,11 @@ pub fn update_inventory_menu(
                 ));
 
                 row.spawn((
-                    Text::new(inventory.get_item_count(item).to_string()),
+                    Text::new(inventory.count(&item).to_string()),
+                    TextFont {
+                        font_size: 16.0,
+                        ..default()
+                    },
                     PickingBehavior::IGNORE,
                 ));
             });

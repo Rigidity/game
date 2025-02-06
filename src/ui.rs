@@ -1,5 +1,6 @@
 mod hud;
 mod inventory_menu;
+mod item_image_cache;
 mod pause_menu;
 
 use bevy::{
@@ -17,6 +18,7 @@ use pause_menu::{setup_pause_menu, toggle_pause_menu};
 use crate::game_state::{is_unpaused, GameState};
 
 pub use hud::Inventory;
+pub use item_image_cache::ItemImageCache;
 
 #[derive(Debug, Clone, Copy)]
 pub struct UiPlugin;

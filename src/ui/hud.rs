@@ -1,20 +1,19 @@
 use bevy::{prelude::*, utils::HashMap};
 
-use crate::{item::Item, player::Player, position::BlockPos};
+use crate::{item::Item, loader::ItemImages, player::Player, position::BlockPos};
+
+use super::ItemImageCache;
 
 #[derive(Debug, Default, Clone, Resource)]
 pub struct Inventory {
-    pub items: HashMap<Item, (usize, Handle<Image>)>,
+    pub items: HashMap<Item, usize>,
     pub hotbar: [Option<Item>; 9],
     pub selected_slot: usize,
 }
 
 impl Inventory {
-    pub fn add(&mut self, item: Item, count: usize, asset_server: &AssetServer) {
-        self.items
-            .entry(item)
-            .or_insert((0, asset_server.load(item.get_texture_path())))
-            .0 += count;
+    pub fn add(&mut self, item: Item, count: usize) {
+        *self.items.entry(item).or_insert(0) += count;
 
         if self.hotbar.contains(&Some(item)) {
             return;
@@ -25,18 +24,12 @@ impl Inventory {
         }
     }
 
-    pub fn get_hotbar_slot(&self, slot: usize) -> Option<Item> {
+    pub fn get(&self, slot: usize) -> Option<Item> {
         self.hotbar.get(slot).copied().flatten()
     }
 
-    pub fn get_item_count(&self, item: &Item) -> usize {
-        self.items.get(item).map_or(0, |(count, _)| *count)
-    }
-
-    pub fn get_item_texture(&self, item: &Item) -> Handle<Image> {
-        self.items
-            .get(item)
-            .map_or(Handle::default(), |(_, texture)| texture.clone())
+    pub fn count(&self, item: &Item) -> usize {
+        self.items.get(item).copied().unwrap_or(0)
     }
 
     pub fn items(&self) -> impl Iterator<Item = &Item> + Clone {
@@ -147,6 +140,9 @@ pub fn update_hotbar_display(
     mut commands: Commands,
     inventory: Res<Inventory>,
     asset_server: Res<AssetServer>,
+    item_images: Res<ItemImages>,
+    mut item_image_cache: ResMut<ItemImageCache>,
+    mut images: ResMut<Assets<Image>>,
     mut hotbar_slots: Query<(Entity, &mut ImageNode, &HotbarSlot)>,
     item_displays: Query<Entity, With<ItemDisplay>>,
 ) {
@@ -161,9 +157,9 @@ pub fn update_hotbar_display(
 
     // Update each slot with current inventory items
     for (slot_entity, mut image_node, hotbar_slot) in hotbar_slots.iter_mut() {
-        if let Some(item) = inventory.get_hotbar_slot(hotbar_slot.0) {
-            let item_count = inventory.get_item_count(&item);
-            let item_texture = inventory.get_item_texture(&item);
+        if let Some(item) = inventory.get(hotbar_slot.0) {
+            let item_count = inventory.count(&item);
+            let item_texture = item_image_cache.get(item, &mut images, &item_images);
 
             // Spawn the item image and count inside the slot
             commands.entity(slot_entity).with_children(|parent| {

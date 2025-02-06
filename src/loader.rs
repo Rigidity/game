@@ -16,6 +16,7 @@ use bevy_asset_loader::prelude::*;
 use crate::{
     game_state::GameState,
     position::LocalPos,
+    ui::ItemImageCache,
     voxel_mesh::{VoxelFace, VoxelMesh},
 };
 
@@ -25,62 +26,119 @@ pub struct LoaderPlugin;
 impl Plugin for LoaderPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<VoxelMaterial>::default())
+            .init_resource::<ItemImageCache>()
             .add_loading_state(
                 LoadingState::new(GameState::Loading)
                     .continue_to_state(GameState::Setup)
-                    .load_collection::<ImageAssets>(),
+                    .load_collection::<BlockImages>()
+                    .load_collection::<DestroyImages>()
+                    .load_collection::<ItemImages>(),
             )
             .add_systems(OnEnter(GameState::Setup), setup_global_texture_array);
     }
 }
 
 #[derive(Debug, Clone, AssetCollection, Resource)]
-pub struct ImageAssets {
+pub struct BlockImages {
     #[asset(path = "Voxels/Rock.png")]
     pub rock: Handle<Image>,
+
     #[asset(path = "Voxels/Dirt.png")]
     pub dirt: Handle<Image>,
+
     #[asset(path = "Voxels/GrassSide.png")]
     pub grass_side: Handle<Image>,
+
     #[asset(path = "Voxels/Grass.png")]
     pub grass: Handle<Image>,
+
     #[asset(path = "Voxels/Leaves.png")]
     pub leaves: Handle<Image>,
+
     #[asset(path = "Voxels/Wood.png")]
     pub wood: Handle<Image>,
+
     #[asset(path = "Voxels/WoodSide.png")]
     pub wood_side: Handle<Image>,
+
     #[asset(path = "Voxels/Sand.png")]
     pub sand: Handle<Image>,
+
     #[asset(path = "Voxels/Water.png")]
     pub water: Handle<Image>,
+
     #[asset(path = "Voxels/Gravel.png")]
     pub gravel: Handle<Image>,
-
-    #[asset(path = "Destroy/stage_0.png")]
-    pub destroy_stage_0: Handle<Image>,
-    #[asset(path = "Destroy/stage_1.png")]
-    pub destroy_stage_1: Handle<Image>,
-    #[asset(path = "Destroy/stage_2.png")]
-    pub destroy_stage_2: Handle<Image>,
-    #[asset(path = "Destroy/stage_3.png")]
-    pub destroy_stage_3: Handle<Image>,
-    #[asset(path = "Destroy/stage_4.png")]
-    pub destroy_stage_4: Handle<Image>,
-    #[asset(path = "Destroy/stage_5.png")]
-    pub destroy_stage_5: Handle<Image>,
-    #[asset(path = "Destroy/stage_6.png")]
-    pub destroy_stage_6: Handle<Image>,
-    #[asset(path = "Destroy/stage_7.png")]
-    pub destroy_stage_7: Handle<Image>,
-    #[asset(path = "Destroy/stage_8.png")]
-    pub destroy_stage_8: Handle<Image>,
-    #[asset(path = "Destroy/stage_9.png")]
-    pub destroy_stage_9: Handle<Image>,
 }
 
-impl ImageAssets {
-    pub fn textures(&self) -> Vec<Handle<Image>> {
+#[derive(Debug, Clone, AssetCollection, Resource)]
+pub struct DestroyImages {
+    #[asset(path = "Destroy/stage_0.png")]
+    pub stage_0: Handle<Image>,
+
+    #[asset(path = "Destroy/stage_1.png")]
+    pub stage_1: Handle<Image>,
+
+    #[asset(path = "Destroy/stage_2.png")]
+    pub stage_2: Handle<Image>,
+
+    #[asset(path = "Destroy/stage_3.png")]
+    pub stage_3: Handle<Image>,
+
+    #[asset(path = "Destroy/stage_4.png")]
+    pub stage_4: Handle<Image>,
+
+    #[asset(path = "Destroy/stage_5.png")]
+    pub stage_5: Handle<Image>,
+
+    #[asset(path = "Destroy/stage_6.png")]
+    pub stage_6: Handle<Image>,
+
+    #[asset(path = "Destroy/stage_7.png")]
+    pub stage_7: Handle<Image>,
+
+    #[asset(path = "Destroy/stage_8.png")]
+    pub stage_8: Handle<Image>,
+
+    #[asset(path = "Destroy/stage_9.png")]
+    pub stage_9: Handle<Image>,
+}
+
+#[derive(Debug, Clone, AssetCollection, Resource)]
+pub struct ItemImages {
+    #[asset(path = "Items/Items - Binding.png")]
+    pub binding: Handle<Image>,
+
+    #[asset(path = "Items/Items - Flint.png")]
+    pub flint: Handle<Image>,
+
+    #[asset(path = "Items/Items - Handle.png")]
+    pub handle: Handle<Image>,
+
+    #[asset(path = "Items/Items - Pickaxe Binding Layer.png")]
+    pub pickaxe_binding_layer: Handle<Image>,
+
+    #[asset(path = "Items/Items - Pickaxe Handle Layer.png")]
+    pub pickaxe_handle_layer: Handle<Image>,
+
+    #[asset(path = "Items/Items - Pickaxe Head Layer.png")]
+    pub pickaxe_head_layer: Handle<Image>,
+
+    #[asset(path = "Items/Items - Pickaxe Head.png")]
+    pub pickaxe_head: Handle<Image>,
+
+    #[asset(path = "Items/Items - Plant Fiber.png")]
+    pub plant_fiber: Handle<Image>,
+
+    #[asset(path = "Items/Items - Soil.png")]
+    pub soil: Handle<Image>,
+
+    #[asset(path = "Items/Items - Twig.png")]
+    pub twig: Handle<Image>,
+}
+
+impl BlockImages {
+    pub fn handles(&self) -> Vec<Handle<Image>> {
         vec![
             self.rock.clone(),
             self.dirt.clone(),
@@ -94,19 +152,21 @@ impl ImageAssets {
             self.gravel.clone(),
         ]
     }
+}
 
-    pub fn destroy(&self) -> Vec<Handle<Image>> {
+impl DestroyImages {
+    pub fn handles(&self) -> Vec<Handle<Image>> {
         vec![
-            self.destroy_stage_0.clone(),
-            self.destroy_stage_1.clone(),
-            self.destroy_stage_2.clone(),
-            self.destroy_stage_3.clone(),
-            self.destroy_stage_4.clone(),
-            self.destroy_stage_5.clone(),
-            self.destroy_stage_6.clone(),
-            self.destroy_stage_7.clone(),
-            self.destroy_stage_8.clone(),
-            self.destroy_stage_9.clone(),
+            self.stage_0.clone(),
+            self.stage_1.clone(),
+            self.stage_2.clone(),
+            self.stage_3.clone(),
+            self.stage_4.clone(),
+            self.stage_5.clone(),
+            self.stage_6.clone(),
+            self.stage_7.clone(),
+            self.stage_8.clone(),
+            self.stage_9.clone(),
         ]
     }
 }
@@ -199,13 +259,14 @@ impl Material for VoxelMaterial {
 
 fn setup_global_texture_array(
     mut commands: Commands,
-    image_assets: Res<ImageAssets>,
+    block_images: Res<BlockImages>,
+    destroy_images: Res<DestroyImages>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    let textures = create_texture_array(image_assets.textures(), &mut images).unwrap();
-    let destroy = create_texture_array(image_assets.destroy(), &mut images).unwrap();
-
-    commands.insert_resource(GlobalTextureArray { textures, destroy });
+    commands.insert_resource(GlobalTextureArray {
+        textures: create_texture_array(block_images.handles(), &mut images).unwrap(),
+        destroy: create_texture_array(destroy_images.handles(), &mut images).unwrap(),
+    });
 }
 
 fn create_texture_array(
