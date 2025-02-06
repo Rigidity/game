@@ -161,8 +161,8 @@ pub fn break_or_place_block(
     mouse: Res<ButtonInput<MouseButton>>,
     focused_block: Res<FocusedBlock>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
-    mut level: ResMut<Level>,
     mut inventory: ResMut<Inventory>,
+    mut level: ResMut<Level>,
     mut break_progress: ResMut<BlockBreakProgress>,
     mut commands: Commands,
 ) {
@@ -176,7 +176,10 @@ pub fn break_or_place_block(
 
     if mouse.pressed(MouseButton::Left) {
         if let Some(block_pos) = focused_block.block_pos {
-            if !level.block(block_pos).is_breakable_by_fist() {
+            if !level
+                .block(block_pos)
+                .is_breakable_by(inventory.selected_item())
+            {
                 break_progress.progress = 0.0;
                 return;
             }

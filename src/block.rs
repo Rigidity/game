@@ -96,10 +96,11 @@ impl Block {
         }
     }
 
-    pub fn is_breakable_by_fist(self) -> bool {
-        match self {
-            Self::Dirt | Self::Grass | Self::Sand | Self::Gravel | Self::Leaves => true,
-            Self::Air | Self::Rock | Self::Wood | Self::Water => false,
+    pub fn is_breakable_by(self, item: Option<Item>) -> bool {
+        match (item, self) {
+            (_, Self::Dirt | Self::Grass | Self::Sand | Self::Gravel | Self::Leaves)
+            | (Some(Item::Pickaxe { .. }), Self::Rock) => true,
+            (_, Self::Rock | Self::Air | Self::Wood | Self::Water) => false,
         }
     }
 

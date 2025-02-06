@@ -35,6 +35,10 @@ impl Inventory {
     pub fn items(&self) -> impl Iterator<Item = &Item> + Clone {
         self.items.keys()
     }
+
+    pub fn selected_item(&self) -> Option<Item> {
+        self.hotbar.get(self.selected_slot).copied().flatten()
+    }
 }
 
 #[derive(Debug, Clone, Copy, Component)]
