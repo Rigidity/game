@@ -1,7 +1,7 @@
 use bevy::{prelude::*, window::PrimaryWindow};
 use itertools::Itertools;
 
-use super::{hud::Hud, set_grab, Inventory};
+use super::{set_grab, Inventory};
 
 #[derive(Debug, Clone, Copy, Component)]
 pub struct InventoryMenu;
@@ -63,8 +63,7 @@ pub fn setup_inventory_menu(mut commands: Commands) {
 pub fn toggle_inventory_menu(
     keys: Res<ButtonInput<KeyCode>>,
     mut primary_window: Query<&mut Window, With<PrimaryWindow>>,
-    mut inventory_menu: Query<&mut Visibility, (With<InventoryMenu>, Without<Hud>)>,
-    mut hud: Query<&mut Visibility, (With<Hud>, Without<InventoryMenu>)>,
+    mut inventory_menu: Query<&mut Visibility, With<InventoryMenu>>,
     mut inventory_item_list: Query<&mut ScrollPosition, With<InventoryItemList>>,
 ) {
     let opening = keys.just_pressed(KeyCode::KeyI) && inventory_menu.single() == Visibility::Hidden;
@@ -87,13 +86,6 @@ pub fn toggle_inventory_menu(
         Visibility::Visible
     };
 
-    let mut hud = hud.single_mut();
-    *hud = if should_grab {
-        Visibility::Visible
-    } else {
-        Visibility::Hidden
-    };
-
     inventory_item_list.single_mut().offset_y = 0.0;
 }
 
@@ -114,6 +106,7 @@ pub fn update_inventory_menu(
     commands.entity(item_list.single()).with_children(|list| {
         for item in inventory.items().sorted() {
             list.spawn((
+                InventoryItem,
                 Node {
                     display: Display::Flex,
                     flex_direction: FlexDirection::Row,
@@ -129,7 +122,6 @@ pub fn update_inventory_menu(
             ))
             .with_children(|row| {
                 row.spawn((
-                    InventoryItem,
                     ImageNode::new(inventory.get_item_texture(item)),
                     Node {
                         width: Val::Px(32.0),
