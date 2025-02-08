@@ -13,7 +13,7 @@ use crate::{
 
 const TREE_HEIGHT: i32 = 6; // Tall but not gigantic
 const TREE_RADIUS: i32 = 5; // Reasonable canopy size
-const STRUCTURE_ATTEMPT_SPACING: i32 = 4; // Closer base spacing
+const STRUCTURE_ATTEMPT_SPACING: i32 = 10; // Closer base spacing
 
 #[derive(Debug, Default, Clone, Resource)]
 pub struct LevelGenerator {
@@ -29,63 +29,6 @@ impl LevelGenerator {
             terrain_noise: Perlin::new(seed + 1),
             moisture_noise: Perlin::new(seed + 2),
         }
-    }
-
-    fn get_density_factor(&self, pos: &Vec3) -> f64 {
-        // Create distinct layers with different frequencies
-        let base_scale = self.density_noise.get([
-            pos.x as f64 * 0.005,
-            pos.y as f64 * 0.005,
-            pos.z as f64 * 0.005,
-        ]) * 0.6;
-
-        // Add floating island layer
-        let island_scale = self.density_noise.get([
-            pos.x as f64 * 0.015,
-            (pos.y as f64 + 1000.0) * 0.008, // Offset Y to get different pattern
-            pos.z as f64 * 0.015,
-        ]) * 0.4;
-
-        // Create height-based bands for different layers
-        let y_level = pos.y as f64;
-
-        // Define different zones
-        let surface_zone = (y_level - 64.0) / 32.0;
-        let floating_zone = (y_level - 128.0) / 32.0;
-
-        // Smoothly blend between zones
-        let surface_influence = (-surface_zone * surface_zone).exp();
-        let floating_influence = (-floating_zone * floating_zone).exp();
-
-        // Combine the layers
-        let combined = base_scale * surface_influence + island_scale * floating_influence;
-
-        // Add cave systems
-        let cave_noise = self.density_noise.get([
-            pos.x as f64 * 0.03,
-            pos.y as f64 * 0.03,
-            pos.z as f64 * 0.03,
-        ]) * 0.5;
-
-        combined + cave_noise + pos.y as f64 * 0.0001
-    }
-
-    fn get_terrain_density(&self, pos: &Vec3) -> f64 {
-        // Make terrain more varied
-        let base_terrain = self.terrain_noise.get([
-            pos.x as f64 * 0.015,
-            pos.y as f64 * 0.02,
-            pos.z as f64 * 0.015,
-        ]);
-
-        // Add some smaller detail
-        let detail = self.terrain_noise.get([
-            pos.x as f64 * 0.05,
-            pos.y as f64 * 0.05,
-            pos.z as f64 * 0.05,
-        ]) * 0.3;
-
-        base_terrain + detail
     }
 
     fn get_moisture(&self, pos: &Vec3) -> f64 {
@@ -104,88 +47,43 @@ impl LevelGenerator {
         ChaCha8Rng::seed_from_u64(hash ^ self.density_noise.seed() as u64)
     }
 
-    fn get_structure_positions_affecting_chunk(&self, chunk_pos: ChunkPos) -> Vec<BlockPos> {
-        let chunk_min = chunk_pos.world_pos();
-        let chunk_max = (chunk_pos + ChunkPos::new(1, 1, 1)).world_pos();
-        let structure_radius = (0.max(TREE_HEIGHT + TREE_RADIUS) + 1) as f32;
+    fn get_height(&self, x: f64, z: f64) -> i32 {
+        // Create a more dramatic heightmap using our terrain noise
+        let base_height = self.terrain_noise.get([x * 0.01, z * 0.01, 0.0]);
 
-        // Calculate the grid positions that could affect this chunk
-        let min_x =
-            ((chunk_min.x - structure_radius) / STRUCTURE_ATTEMPT_SPACING as f32).floor() as i32;
-        let max_x =
-            ((chunk_max.x + structure_radius) / STRUCTURE_ATTEMPT_SPACING as f32).ceil() as i32;
-        let min_z =
-            ((chunk_min.z - structure_radius) / STRUCTURE_ATTEMPT_SPACING as f32).floor() as i32;
-        let max_z =
-            ((chunk_max.z + structure_radius) / STRUCTURE_ATTEMPT_SPACING as f32).ceil() as i32;
+        // Add medium-scale variation
+        let medium_detail = self.terrain_noise.get([x * 0.05, z * 0.05, 0.0]) * 0.3;
 
-        // Calculate Y range to check for structures that could affect this chunk
-        let check_height = TREE_HEIGHT + TREE_RADIUS;
-        let min_y = chunk_pos.y - (check_height / CHUNK_SIZE as i32) - 1;
-        let max_y = chunk_pos.y + (check_height / CHUNK_SIZE as i32) + 1;
+        // Add small-scale detail
+        let small_detail = self.terrain_noise.get([x * 0.1, z * 0.1, 0.0]) * 0.1;
 
-        let mut positions = Vec::new();
-
-        for x in min_x..=max_x {
-            for y in min_y..=max_y {
-                for z in min_z..=max_z {
-                    let base_pos = BlockPos::new(
-                        x * STRUCTURE_ATTEMPT_SPACING,
-                        y * CHUNK_SIZE as i32,
-                        z * STRUCTURE_ATTEMPT_SPACING,
-                    );
-
-                    let mut cell_rng = self.get_structure_rng(base_pos);
-
-                    // Increase spawn chance to 70%
-                    if cell_rng.random::<f32>() < 0.7 {
-                        // Smaller random offset for more even distribution
-                        let offset_x = cell_rng.random_range(-2..3);
-                        let offset_z = cell_rng.random_range(-2..3);
-
-                        let origin =
-                            BlockPos::new(base_pos.x + offset_x, base_pos.y, base_pos.z + offset_z);
-                        positions.push(origin);
-                    }
-                }
-            }
-        }
-
-        positions
+        // Combine and amplify the height variations
+        // Multiply by 16 instead of 4 for more dramatic heights
+        ((base_height + medium_detail + small_detail) * 16.0).round() as i32
     }
 
     pub fn generate_chunk(&mut self, chunk_pos: ChunkPos) -> Chunk {
         let mut chunk = Chunk::new();
 
-        // Generate terrain first
+        // Generate terrain
         for x in 0..CHUNK_SIZE {
-            for y in 0..CHUNK_SIZE {
-                for z in 0..CHUNK_SIZE {
+            for z in 0..CHUNK_SIZE {
+                for y in 0..CHUNK_SIZE {
                     let local_pos = LocalPos::new(x, y, z);
                     let block_pos = local_pos.block_pos(chunk_pos);
-                    let pos = block_pos.world_pos();
+                    let world_pos = block_pos.world_pos();
+                    let height = self.get_height(world_pos.x as f64, world_pos.z as f64);
 
-                    let density_factor = self.get_density_factor(&pos);
-                    let terrain_density = self.get_terrain_density(&pos);
-                    let moisture = self.get_moisture(&pos);
-                    if terrain_density > density_factor {
-                        // Check upwards until we find air to determine if we're near a surface
-                        let distance_to_surface = (0..=5)
-                            .find(|&d| {
-                                let check_pos = (block_pos + BlockPos::Y * d).world_pos();
-                                let check_density_factor = self.get_density_factor(&check_pos);
-                                let check_terrain_density = self.get_terrain_density(&check_pos);
-                                check_terrain_density <= check_density_factor
-                            })
-                            .unwrap_or(5);
+                    if block_pos.y <= height {
+                        let moisture = self.get_moisture(&world_pos);
 
-                        let block_type = if distance_to_surface == 1 {
+                        let block_type = if block_pos.y == height {
+                            // Surface layer
                             if moisture > 0.3 {
-                                // Create patches of gravel on the surface
                                 let gravel_noise = self.terrain_noise.get([
-                                    pos.x as f64 * 0.08, // Slightly larger patches
-                                    pos.y as f64 * 0.08,
-                                    pos.z as f64 * 0.08,
+                                    world_pos.x as f64 * 0.08,
+                                    world_pos.z as f64 * 0.08,
+                                    0.0,
                                 ]);
 
                                 if gravel_noise > 0.6 {
@@ -196,13 +94,15 @@ impl LevelGenerator {
                             } else {
                                 Block::Sand
                             }
-                        } else if distance_to_surface <= 3 {
+                        } else if block_pos.y >= height - 2 {
+                            // Subsurface layers
                             if moisture > 0.3 {
                                 Block::Dirt
                             } else {
                                 Block::Sand
                             }
                         } else {
+                            // Deep layers
                             Block::Rock
                         };
 
@@ -217,34 +117,11 @@ impl LevelGenerator {
 
         // Try generating structures at each position
         for pos in structure_positions {
-            let world_pos = pos.world_pos();
-
-            // Check a few positions around the base to ensure we're on relatively flat ground
-            let base_positions = [
-                world_pos + Vec3::new(0.0, -1.0, 0.0), // Below
-                world_pos + Vec3::new(1.0, -1.0, 0.0), // Adjacent below positions
-                world_pos + Vec3::new(-1.0, -1.0, 0.0),
-                world_pos + Vec3::new(0.0, -1.0, 1.0),
-                world_pos + Vec3::new(0.0, -1.0, -1.0),
-            ];
-
-            // Check if we're on solid ground
-            let valid_ground = base_positions.iter().all(|check_pos| {
-                let check_density_factor = self.get_density_factor(check_pos);
-                let check_terrain_density = self.get_terrain_density(check_pos);
-                check_terrain_density > check_density_factor
-            });
+            // Get the height at this position
+            let height = self.get_height(pos.x as f64, pos.z as f64);
+            let valid_ground = pos.y == height + 1; // Check if we're one block above the surface
 
             if !valid_ground {
-                continue;
-            }
-
-            // Check if we have air space for the tree
-            let air_pos = world_pos;
-            let air_density_factor = self.get_density_factor(&air_pos);
-            let air_terrain_density = self.get_terrain_density(&air_pos);
-
-            if air_terrain_density > air_density_factor {
                 continue;
             }
 
@@ -271,6 +148,56 @@ impl LevelGenerator {
         }
 
         chunk
+    }
+
+    fn get_structure_positions_affecting_chunk(&self, chunk_pos: ChunkPos) -> Vec<BlockPos> {
+        let chunk_min = chunk_pos.world_pos();
+        let chunk_max = (chunk_pos + ChunkPos::new(1, 1, 1)).world_pos();
+        let structure_radius = (0.max(TREE_HEIGHT + TREE_RADIUS) + 1) as f32;
+
+        let min_x =
+            ((chunk_min.x - structure_radius) / STRUCTURE_ATTEMPT_SPACING as f32).floor() as i32;
+        let max_x =
+            ((chunk_max.x + structure_radius) / STRUCTURE_ATTEMPT_SPACING as f32).ceil() as i32;
+        let min_z =
+            ((chunk_min.z - structure_radius) / STRUCTURE_ATTEMPT_SPACING as f32).floor() as i32;
+        let max_z =
+            ((chunk_max.z + structure_radius) / STRUCTURE_ATTEMPT_SPACING as f32).ceil() as i32;
+
+        let mut positions = Vec::new();
+
+        for x in min_x..=max_x {
+            for z in min_z..=max_z {
+                let base_x = x * STRUCTURE_ATTEMPT_SPACING;
+                let base_z = z * STRUCTURE_ATTEMPT_SPACING;
+
+                // Get the height at this position
+                let height = self.get_height(base_x as f64, base_z as f64);
+
+                let base_pos = BlockPos::new(
+                    base_x,
+                    height + 1, // One block above surface
+                    base_z,
+                );
+
+                let mut cell_rng = self.get_structure_rng(base_pos);
+
+                if cell_rng.random::<f32>() < 0.1 {
+                    let offset_x = cell_rng.random_range(-2..3);
+                    let offset_z = cell_rng.random_range(-2..3);
+
+                    // Get height at the offset position
+                    let final_x = base_x + offset_x;
+                    let final_z = base_z + offset_z;
+                    let final_height = self.get_height(final_x as f64, final_z as f64);
+
+                    let origin = BlockPos::new(final_x, final_height + 1, final_z);
+                    positions.push(origin);
+                }
+            }
+        }
+
+        positions
     }
 
     fn get_tree_block(
