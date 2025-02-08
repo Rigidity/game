@@ -56,6 +56,20 @@ pub fn spawn_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
                 },
             ));
 
+            hud.spawn((
+                Text::new("+"),
+                TextFont {
+                    font_size: 24.0,
+                    ..default()
+                },
+                Node {
+                    position_type: PositionType::Absolute,
+                    margin: UiRect::all(Val::Auto),
+                    ..default()
+                },
+                PickingBehavior::IGNORE,
+            ));
+
             hud.spawn(Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(20.0),

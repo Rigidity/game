@@ -40,34 +40,34 @@ impl Plugin for LoaderPlugin {
 
 #[derive(Debug, Clone, AssetCollection, Resource)]
 pub struct BlockImages {
-    #[asset(path = "Voxels/Rock.png")]
+    #[asset(path = "Voxels/Blocks - Rock.png")]
     pub rock: Handle<Image>,
 
-    #[asset(path = "Voxels/Dirt.png")]
+    #[asset(path = "Voxels/Blocks - Dirt.png")]
     pub dirt: Handle<Image>,
 
-    #[asset(path = "Voxels/GrassSide.png")]
+    #[asset(path = "Voxels/Blocks - Grass Side.png")]
     pub grass_side: Handle<Image>,
 
-    #[asset(path = "Voxels/Grass.png")]
+    #[asset(path = "Voxels/Blocks - Grass.png")]
     pub grass: Handle<Image>,
 
     #[asset(path = "Voxels/Leaves.png")]
     pub leaves: Handle<Image>,
 
-    #[asset(path = "Voxels/Wood.png")]
+    #[asset(path = "Voxels/Blocks - Wood.png")]
     pub wood: Handle<Image>,
 
-    #[asset(path = "Voxels/WoodSide.png")]
+    #[asset(path = "Voxels/Blocks - Wood Side.png")]
     pub wood_side: Handle<Image>,
 
-    #[asset(path = "Voxels/Sand.png")]
+    #[asset(path = "Voxels/Blocks - Sand.png")]
     pub sand: Handle<Image>,
 
     #[asset(path = "Voxels/Water.png")]
     pub water: Handle<Image>,
 
-    #[asset(path = "Voxels/Gravel.png")]
+    #[asset(path = "Voxels/Blocks - Gravel.png")]
     pub gravel: Handle<Image>,
 }
 

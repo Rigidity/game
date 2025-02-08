@@ -46,6 +46,27 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 
     var final_pos = vec3<f32>(x, y, z);
     
+    var uv = vec2<f32>(
+        f32(corner & 1u),
+        1.0 - f32(corner >> 1u)
+    );
+    
+    // Flip UV.x for right and back faces
+    if (face == 3u || face == 5u) {  // Right face (3) or Back face (5)
+        uv.x = 1.0 - uv.x;
+    }
+
+    // Flip UV.y for top face
+    if (face == 0u) {
+        uv.y = 1.0 - uv.y;
+    }
+
+    // Flip UV.x and UV.y for bottom face
+    if (face == 1u) {
+        uv.x = 1.0 - uv.x;
+        uv.y = 1.0 - uv.y;
+    }
+
     // Apply offsets based on face and corner
     switch face {
         case 0u: { // Top
@@ -77,11 +98,6 @@ fn vertex(vertex: Vertex) -> VertexOutput {
         }
         default: {}
     }
-
-    let uv = vec2<f32>(
-        f32(corner & 1u),
-        1.0 - f32(corner >> 1u)
-    );
 
     var out: VertexOutput;
     let model = get_world_from_local(vertex.instance_index);
