@@ -93,7 +93,7 @@ fn material_color(material: Material) -> Color {
         Material::Twig => Color::srgb(0.7, 0.45, 0.0),
         Material::PlantFiber => Color::srgb(0.1, 0.8, 0.1),
         Material::Flint => Color::srgb(0.4, 0.4, 0.4),
-        Material::Glass => Color::srgb(0.83 * 1.1, 0.99 * 1.1, 1.0 * 1.1),
+        Material::Glass => Color::srgba(0.83 * 1.5, 0.99 * 1.5, 1.0 * 1.5, 0.4),
     }
 }
 
@@ -115,6 +115,7 @@ fn colorize_template(mut template: Image, color: Color) -> Image {
                 [grayscale.red, grayscale.green, grayscale.blue],
                 [color.red, color.green, color.blue],
             );
+
             template
                 .set_color_at(
                     x,
@@ -150,7 +151,7 @@ fn copy_non_transparent_pixels(
 ) -> Image {
     for x in 0..from.width() {
         for y in 0..from.height() {
-            let pixel = from.get_color_at(x, y).unwrap().to_srgba();
+            let over = from.get_color_at(x, y).unwrap().to_srgba();
 
             let dest_x = x + offset_x;
             let dest_y = y + offset_y;
@@ -160,37 +161,27 @@ fn copy_non_transparent_pixels(
                 continue;
             }
 
-            let current = image.get_color_at(dest_x, dest_y).unwrap().to_srgba();
+            let under = image.get_color_at(dest_x, dest_y).unwrap().to_srgba();
 
-            if pixel.alpha == 0.0 {
-                continue;
-            }
+            // Standard "over" alpha compositing
+            let a_out = over.alpha + under.alpha * (1.0 - over.alpha);
 
-            // Blend each color channel (RGB)
-            let blended = Color::srgba(
-                blend_channel(pixel.red, current.red, pixel.alpha),
-                blend_channel(pixel.green, current.green, pixel.alpha),
-                blend_channel(pixel.blue, current.blue, pixel.alpha),
-                blend_opacity(pixel.alpha, current.alpha),
-            );
+            let blended = if a_out > 0.0 {
+                Color::srgba(
+                    (over.red * over.alpha + under.red * under.alpha * (1.0 - over.alpha)) / a_out,
+                    (over.green * over.alpha + under.green * under.alpha * (1.0 - over.alpha))
+                        / a_out,
+                    (over.blue * over.alpha + under.blue * under.alpha * (1.0 - over.alpha))
+                        / a_out,
+                    a_out,
+                )
+            } else {
+                Color::NONE
+            };
 
             image.set_color_at(dest_x, dest_y, blended).unwrap();
         }
     }
 
     image
-}
-
-// Helper function to blend a single color channel
-fn blend_channel(foreground: f32, background: f32, alpha: f32) -> f32 {
-    let fg = foreground;
-    let bg = background;
-    fg * alpha + bg * (1.0 - alpha)
-}
-
-// Helper function to blend opacity values
-fn blend_opacity(foreground: f32, background: f32) -> f32 {
-    let alpha_f = foreground;
-    let alpha_b = background;
-    alpha_f + alpha_b * (1.0 - alpha_f)
 }

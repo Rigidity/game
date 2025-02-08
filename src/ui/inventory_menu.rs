@@ -12,7 +12,7 @@ pub struct InventoryMenu;
 pub struct InventoryItemList;
 
 #[derive(Debug, Clone, Copy, Component)]
-pub struct InventoryItem;
+pub struct InventoryItem(usize);
 
 pub fn setup_inventory_menu(mut commands: Commands) {
     commands
@@ -43,7 +43,7 @@ pub fn setup_inventory_menu(mut commands: Commands) {
                     flex_direction: FlexDirection::Column,
                     ..default()
                 },
-                BackgroundColor(Color::srgba(0.3, 0.3, 0.3, 0.5)),
+                BackgroundColor(Color::srgba(0.4, 0.4, 0.4, 0.5)),
                 BorderRadius::all(Val::Px(8.0)),
             ))
             .with_child((
@@ -108,11 +108,11 @@ pub fn update_inventory_menu(
     }
 
     commands.entity(item_list.single()).with_children(|list| {
-        for &item in inventory.items().iter().sorted() {
+        for (index, &item) in inventory.items().iter().enumerate().sorted() {
             let item_texture = item_image_cache.get(item, &mut images, &item_images);
 
             list.spawn((
-                InventoryItem,
+                InventoryItem(index),
                 Node {
                     display: Display::Flex,
                     flex_direction: FlexDirection::Row,
@@ -121,10 +121,12 @@ pub fn update_inventory_menu(
                     width: Val::Percent(100.0),
                     ..default()
                 },
+                BorderRadius::all(Val::Px(4.0)),
                 PickingBehavior {
                     should_block_lower: false,
                     is_hoverable: true,
                 },
+                Interaction::None,
             ))
             .with_children(|row| {
                 row.spawn((
@@ -150,4 +152,36 @@ pub fn update_inventory_menu(
             });
         }
     });
+}
+
+pub fn update_item_hover(mut query: Query<(&Interaction, &mut BackgroundColor)>) {
+    for (interaction, mut color) in query.iter_mut() {
+        color.0 = match interaction {
+            Interaction::Hovered => Color::srgb(0.2, 0.2, 0.2),
+            Interaction::Pressed => Color::srgb(0.15, 0.15, 0.15),
+            _ => Color::NONE,
+        };
+    }
+}
+
+pub fn set_hotbar_selection(
+    click: Trigger<Pointer<Click>>,
+    mut inventory: ResMut<Inventory>,
+    query: Query<&InventoryItem>,
+) {
+    let Ok(item) = query.get(click.entity()) else {
+        return;
+    };
+
+    let slot = inventory.slot();
+    inventory.set_hotbar(slot, Some(item.0));
+}
+
+pub fn clear_hotbar_slot(keys: Res<ButtonInput<KeyCode>>, mut inventory: ResMut<Inventory>) {
+    if !keys.just_pressed(KeyCode::Backspace) {
+        return;
+    }
+
+    let slot = inventory.slot();
+    inventory.set_hotbar(slot, None);
 }

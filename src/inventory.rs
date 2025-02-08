@@ -105,4 +105,15 @@ impl Inventory {
             *slot = Some(self.items.len() - 1);
         }
     }
+
+    pub fn set_hotbar(&mut self, slot: usize, item: Option<usize>) {
+        if slot < self.hotbar.len() {
+            if let Some(index) = item {
+                if index >= self.items.len() {
+                    return;
+                }
+            }
+            self.hotbar[slot] = item;
+        }
+    }
 }

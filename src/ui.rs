@@ -14,7 +14,10 @@ use bevy::{
 use hud::{
     set_hotbar_slot, spawn_hud, update_fps_text, update_hotbar_display, update_position_text,
 };
-use inventory_menu::{setup_inventory_menu, toggle_inventory_menu, update_inventory_menu};
+use inventory_menu::{
+    clear_hotbar_slot, set_hotbar_selection, setup_inventory_menu, toggle_inventory_menu,
+    update_inventory_menu, update_item_hover,
+};
 use pause_menu::{setup_pause_menu, toggle_pause_menu};
 
 use crate::{
@@ -48,12 +51,20 @@ impl Plugin for UiPlugin {
                 Update,
                 (
                     toggle_pause_menu,
-                    (toggle_inventory_menu, update_inventory_menu).run_if(is_unpaused),
+                    (
+                        toggle_inventory_menu,
+                        update_inventory_menu,
+                        update_item_hover,
+                        clear_hotbar_slot,
+                    )
+                        .chain()
+                        .run_if(is_unpaused),
                 )
                     .chain()
                     .run_if(in_state(GameState::Playing)),
             )
-            .add_systems(Update, update_scroll_position);
+            .add_systems(Update, update_scroll_position)
+            .add_observer(set_hotbar_selection);
     }
 }
 
