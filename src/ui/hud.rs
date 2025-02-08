@@ -31,6 +31,7 @@ pub fn spawn_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
                 height: Val::Percent(100.0),
                 ..default()
             },
+            PickingBehavior::IGNORE,
         ))
         .with_children(|hud| {
             hud.spawn((
