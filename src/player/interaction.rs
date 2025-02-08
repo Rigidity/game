@@ -6,17 +6,17 @@ use bevy::{
 use crate::{
     aabb::Aabb,
     block::Block,
+    inventory::Inventory,
     level::{Dirty, Level, Modified},
     loader::VoxelMaterial,
     position::{BlockPos, ChunkPos, LocalPos, CHUNK_SIZE},
-    ui::Inventory,
     voxel_mesh::VoxelFace,
 };
 
 use super::{Player, PlayerCamera};
 
 const MAX_REACH: f32 = 5.0;
-const BLOCK_BREAK_TIME: f32 = 0.5; // Time in seconds to break a block
+const BLOCK_BREAK_TIME: f32 = 1.0; // Time in seconds to break a block
 const BREAK_STAGES: u32 = 10; // Number of breaking animation stages (0-10)
 
 #[derive(Debug, Default, Clone, Copy, Resource)]
@@ -141,7 +141,7 @@ pub fn update_focused_block(
         if chunk_pos == hit_chunk_pos && focused_block.block_pos.is_some() {
             let break_stage = if let Some(pos) = break_progress.position {
                 if pos == block_pos {
-                    let stage = (break_progress.progress * BREAK_STAGES as f32) as u32;
+                    let stage = (break_progress.progress * BREAK_STAGES as f32).ceil() as u32;
                     stage.min(BREAK_STAGES) + 1
                 } else {
                     1
@@ -176,10 +176,7 @@ pub fn break_or_place_block(
 
     if mouse.pressed(MouseButton::Left) {
         if let Some(block_pos) = focused_block.block_pos {
-            if !level
-                .block(block_pos)
-                .is_breakable_by(inventory.selected_item())
-            {
+            if !level.block(block_pos).is_breakable_by(inventory.hand()) {
                 break_progress.progress = 0.0;
                 return;
             }
@@ -196,7 +193,7 @@ pub fn break_or_place_block(
                 let local_pos = block_pos.local_pos();
 
                 for drop in level.block(block_pos).drops() {
-                    inventory.add(drop, 1);
+                    inventory.add(drop);
                 }
 
                 if let Some(chunk) = level.chunk_mut(chunk_pos) {
@@ -213,7 +210,7 @@ pub fn break_or_place_block(
                 break_progress.progress = 0.0;
             }
         }
-    } else if mouse.just_released(MouseButton::Left) {
+    } else {
         break_progress.position = None;
         break_progress.progress = 0.0;
     }

@@ -1,45 +1,8 @@
-use bevy::{prelude::*, utils::HashMap};
+use bevy::prelude::*;
 
-use crate::{item::Item, loader::ItemImages, player::Player, position::BlockPos};
+use crate::{inventory::Inventory, loader::ItemImages, player::Player, position::BlockPos};
 
 use super::ItemImageCache;
-
-#[derive(Debug, Default, Clone, Resource)]
-pub struct Inventory {
-    pub items: HashMap<Item, usize>,
-    pub hotbar: [Option<Item>; 9],
-    pub selected_slot: usize,
-}
-
-impl Inventory {
-    pub fn add(&mut self, item: Item, count: usize) {
-        *self.items.entry(item).or_insert(0) += count;
-
-        if self.hotbar.contains(&Some(item)) {
-            return;
-        }
-
-        if let Some(slot) = self.hotbar.iter().position(|item| item.is_none()) {
-            self.hotbar[slot] = Some(item);
-        }
-    }
-
-    pub fn get(&self, slot: usize) -> Option<Item> {
-        self.hotbar.get(slot).copied().flatten()
-    }
-
-    pub fn count(&self, item: &Item) -> usize {
-        self.items.get(item).copied().unwrap_or(0)
-    }
-
-    pub fn items(&self) -> impl Iterator<Item = &Item> + Clone {
-        self.items.keys()
-    }
-
-    pub fn selected_item(&self) -> Option<Item> {
-        self.hotbar.get(self.selected_slot).copied().flatten()
-    }
-}
 
 #[derive(Debug, Clone, Copy, Component)]
 pub struct Hud;
@@ -160,10 +123,11 @@ pub fn update_hotbar_display(
     }
 
     // Update each slot with current inventory items
+    let hotbar = inventory.hotbar();
+
     for (slot_entity, mut image_node, hotbar_slot) in hotbar_slots.iter_mut() {
-        if let Some(item) = inventory.get(hotbar_slot.0) {
-            let item_count = inventory.count(&item);
-            let item_texture = item_image_cache.get(item, &mut images, &item_images);
+        if let Some(item) = hotbar[hotbar_slot.0] {
+            let item_texture = item_image_cache.get(*item, &mut images, &item_images);
 
             // Spawn the item image and count inside the slot
             commands.entity(slot_entity).with_children(|parent| {
@@ -181,24 +145,26 @@ pub fn update_hotbar_display(
                 ));
 
                 // Spawn item count text
-                parent.spawn((
-                    Text::new(item_count.to_string()),
-                    TextFont {
-                        font_size: 16.0,
-                        ..default()
-                    },
-                    Node {
-                        position_type: PositionType::Absolute,
-                        bottom: Val::Px(4.0),
-                        right: Val::Px(4.0),
-                        ..default()
-                    },
-                    ItemDisplay,
-                ));
+                if item.kind.is_stackable() {
+                    parent.spawn((
+                        Text::new(item.count.to_string()),
+                        TextFont {
+                            font_size: 16.0,
+                            ..default()
+                        },
+                        Node {
+                            position_type: PositionType::Absolute,
+                            bottom: Val::Px(4.0),
+                            right: Val::Px(4.0),
+                            ..default()
+                        },
+                        ItemDisplay,
+                    ));
+                }
             });
         }
 
-        if hotbar_slot.0 == inventory.selected_slot {
+        if hotbar_slot.0 == inventory.slot() {
             image_node.image = asset_server.load("Slots/Selected.png");
         } else {
             image_node.image = asset_server.load("Slots/Hotbar.png");
@@ -208,22 +174,22 @@ pub fn update_hotbar_display(
 
 pub fn set_hotbar_slot(keys: Res<ButtonInput<KeyCode>>, mut inventory: ResMut<Inventory>) {
     if keys.just_pressed(KeyCode::Digit1) {
-        inventory.selected_slot = 0;
+        inventory.select(0);
     } else if keys.just_pressed(KeyCode::Digit2) {
-        inventory.selected_slot = 1;
+        inventory.select(1);
     } else if keys.just_pressed(KeyCode::Digit3) {
-        inventory.selected_slot = 2;
+        inventory.select(2);
     } else if keys.just_pressed(KeyCode::Digit4) {
-        inventory.selected_slot = 3;
+        inventory.select(3);
     } else if keys.just_pressed(KeyCode::Digit5) {
-        inventory.selected_slot = 4;
+        inventory.select(4);
     } else if keys.just_pressed(KeyCode::Digit6) {
-        inventory.selected_slot = 5;
+        inventory.select(5);
     } else if keys.just_pressed(KeyCode::Digit7) {
-        inventory.selected_slot = 6;
+        inventory.select(6);
     } else if keys.just_pressed(KeyCode::Digit8) {
-        inventory.selected_slot = 7;
+        inventory.select(7);
     } else if keys.just_pressed(KeyCode::Digit9) {
-        inventory.selected_slot = 8;
+        inventory.select(8);
     }
 }

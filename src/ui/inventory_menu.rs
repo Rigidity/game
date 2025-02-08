@@ -1,9 +1,9 @@
 use bevy::{prelude::*, window::PrimaryWindow};
 use itertools::Itertools;
 
-use crate::loader::ItemImages;
+use crate::{inventory::Inventory, loader::ItemImages};
 
-use super::{set_grab, Inventory, ItemImageCache};
+use super::{set_grab, ItemImageCache};
 
 #[derive(Debug, Clone, Copy, Component)]
 pub struct InventoryMenu;
@@ -51,7 +51,6 @@ pub fn setup_inventory_menu(mut commands: Commands) {
                 Node {
                     display: Display::Flex,
                     flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(4.0),
                     overflow: Overflow::scroll_y(),
                     width: Val::Percent(100.0),
                     height: Val::Auto,
@@ -109,7 +108,7 @@ pub fn update_inventory_menu(
     }
 
     commands.entity(item_list.single()).with_children(|list| {
-        for &item in inventory.items().sorted() {
+        for &item in inventory.items().iter().sorted() {
             let item_texture = item_image_cache.get(item, &mut images, &item_images);
 
             list.spawn((
@@ -138,14 +137,16 @@ pub fn update_inventory_menu(
                     PickingBehavior::IGNORE,
                 ));
 
-                row.spawn((
-                    Text::new(inventory.count(&item).to_string()),
-                    TextFont {
-                        font_size: 16.0,
-                        ..default()
-                    },
-                    PickingBehavior::IGNORE,
-                ));
+                if item.kind.is_stackable() {
+                    row.spawn((
+                        Text::new(item.count.to_string()),
+                        TextFont {
+                            font_size: 16.0,
+                            ..default()
+                        },
+                        PickingBehavior::IGNORE,
+                    ));
+                }
             });
         }
     });

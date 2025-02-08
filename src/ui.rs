@@ -3,6 +3,8 @@ mod inventory_menu;
 mod item_image_cache;
 mod pause_menu;
 
+use std::mem;
+
 use bevy::{
     input::mouse::{MouseScrollUnit, MouseWheel},
     picking::focus::HoverMap,
@@ -15,9 +17,11 @@ use hud::{
 use inventory_menu::{setup_inventory_menu, toggle_inventory_menu, update_inventory_menu};
 use pause_menu::{setup_pause_menu, toggle_pause_menu};
 
-use crate::game_state::{is_unpaused, GameState};
+use crate::{
+    game_state::{is_unpaused, GameState},
+    inventory::Inventory,
+};
 
-pub use hud::Inventory;
 pub use item_image_cache::ItemImageCache;
 
 #[derive(Debug, Clone, Copy)]
@@ -33,18 +37,21 @@ impl Plugin for UiPlugin {
             )
             .add_systems(
                 Update,
-                toggle_pause_menu.run_if(in_state(GameState::Playing)),
-            )
-            .add_systems(
-                Update,
                 (
                     update_position_text,
                     update_fps_text,
                     (update_hotbar_display, set_hotbar_slot).chain(),
-                    toggle_inventory_menu.after(toggle_pause_menu),
-                    update_inventory_menu,
                 )
                     .run_if(in_state(GameState::Playing).and(is_unpaused)),
+            )
+            .add_systems(
+                Update,
+                (
+                    toggle_pause_menu,
+                    (toggle_inventory_menu, update_inventory_menu).run_if(is_unpaused),
+                )
+                    .chain()
+                    .run_if(in_state(GameState::Playing)),
             )
             .add_systems(Update, update_scroll_position);
     }
@@ -83,11 +90,11 @@ fn update_scroll_position(
         if keyboard_input.pressed(KeyCode::ControlLeft)
             || keyboard_input.pressed(KeyCode::ControlRight)
         {
-            std::mem::swap(&mut dx, &mut dy);
+            mem::swap(&mut dx, &mut dy);
         }
 
-        for (_pointer, pointer_map) in hover_map.iter() {
-            for (entity, _hit) in pointer_map.iter() {
+        for pointer_map in hover_map.values() {
+            for entity in pointer_map.keys() {
                 if let Ok(mut scroll_position) = scrolled_node_query.get_mut(*entity) {
                     scroll_position.offset_x -= dx;
                     scroll_position.offset_y -= dy;

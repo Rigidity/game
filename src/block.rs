@@ -1,7 +1,7 @@
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::item::{BindingMaterial, HandleMaterial, HeadMaterial, Item};
+use crate::item::{Item, ItemKind, Material, ToolPart};
 use crate::level::Level;
 use crate::position::BlockPos;
 use crate::voxel_mesh::{VoxelFace, VoxelMesh};
@@ -54,20 +54,20 @@ impl Block {
                 let mut drops = Vec::new();
 
                 if rng.random_bool(0.1) {
-                    drops.push(Item::Twig);
+                    drops.push(Item::new(ItemKind::Twig, 1));
                 }
 
                 if rng.random_bool(0.025) {
-                    drops.push(Item::PlantFiber);
+                    drops.push(Item::new(ItemKind::PlantFiber, 1));
                 }
 
                 drops
             }
             Self::Grass => {
-                let mut drops = vec![Item::Soil];
+                let mut drops = vec![Item::new(ItemKind::Soil, 1)];
 
                 if rng.random_bool(0.1) {
-                    drops.push(Item::PlantFiber);
+                    drops.push(Item::new(ItemKind::PlantFiber, 1));
                 }
 
                 drops
@@ -76,21 +76,24 @@ impl Block {
                 let mut drops = Vec::new();
 
                 if rng.random_bool(0.1) {
-                    drops.push(Item::Flint);
+                    drops.push(Item::new(ItemKind::Flint, 1));
                 }
 
                 drops
             }
-            Self::Dirt => vec![Item::Soil],
+            Self::Dirt => vec![Item::new(ItemKind::Soil, 1)],
             Self::Sand => vec![
-                Item::Handle(HandleMaterial::Twig),
-                Item::PickaxeHead(HeadMaterial::Flint),
-                Item::Binding(BindingMaterial::PlantFiber),
-                Item::Pickaxe {
-                    handle: HandleMaterial::Twig,
-                    binding: BindingMaterial::PlantFiber,
-                    head: HeadMaterial::Flint,
-                },
+                Item::new(ItemKind::Handle(ToolPart::new(Material::Twig)), 1),
+                Item::new(ItemKind::PickaxeHead(ToolPart::new(Material::Flint)), 1),
+                Item::new(ItemKind::Binding(ToolPart::new(Material::PlantFiber)), 1),
+                Item::new(
+                    ItemKind::Pickaxe {
+                        handle: ToolPart::new(Material::Twig),
+                        binding: ToolPart::new(Material::PlantFiber),
+                        head: ToolPart::new(Material::Flint),
+                    },
+                    1,
+                ),
             ],
             _ => Vec::new(),
         }
@@ -99,7 +102,13 @@ impl Block {
     pub fn is_breakable_by(self, item: Option<Item>) -> bool {
         match (item, self) {
             (_, Self::Dirt | Self::Grass | Self::Sand | Self::Gravel | Self::Leaves)
-            | (Some(Item::Pickaxe { .. }), Self::Rock) => true,
+            | (
+                Some(Item {
+                    kind: ItemKind::Pickaxe { .. },
+                    ..
+                }),
+                Self::Rock,
+            ) => true,
             (_, Self::Rock | Self::Air | Self::Wood | Self::Water) => false,
         }
     }

@@ -1,7 +1,7 @@
 use bevy::{prelude::*, utils::HashMap};
 
 use crate::{
-    item::{Item, Material},
+    item::{Item, ItemKind, Material},
     loader::ItemImages,
 };
 
@@ -21,32 +21,32 @@ impl ItemImageCache {
             return image.clone();
         }
 
-        let (handle, material) = match item {
-            Item::Flint => return handles.flint.clone(),
-            Item::Soil => return handles.soil.clone(),
-            Item::Twig => return handles.twig.clone(),
-            Item::PlantFiber => return handles.plant_fiber.clone(),
-            Item::Handle(material) => (handles.handle.clone(), Material::from(material)),
-            Item::Binding(material) => (handles.binding.clone(), Material::from(material)),
-            Item::PickaxeHead(material) => (handles.pickaxe_head.clone(), Material::from(material)),
-            Item::Pickaxe {
+        let (handle, material) = match item.kind {
+            ItemKind::Flint => return handles.flint.clone(),
+            ItemKind::Soil => return handles.soil.clone(),
+            ItemKind::Twig => return handles.twig.clone(),
+            ItemKind::PlantFiber => return handles.plant_fiber.clone(),
+            ItemKind::Handle(part) => (handles.handle.clone(), part.material),
+            ItemKind::Binding(part) => (handles.binding.clone(), part.material),
+            ItemKind::PickaxeHead(part) => (handles.pickaxe_head.clone(), part.material),
+            ItemKind::Pickaxe {
                 handle,
                 binding,
                 head,
             } => {
                 let handle = colorize_template(
                     images.get(&handles.pickaxe_handle_layer).unwrap().clone(),
-                    material_color(handle.into()),
+                    material_color(handle.material),
                 );
 
                 let binding = colorize_template(
                     images.get(&handles.pickaxe_binding_layer).unwrap().clone(),
-                    material_color(binding.into()),
+                    material_color(binding.material),
                 );
 
                 let head = colorize_template(
                     images.get(&handles.pickaxe_head_layer).unwrap().clone(),
-                    material_color(head.into()),
+                    material_color(head.material),
                 );
 
                 let image = copy_non_transparent_pixels(
@@ -71,9 +71,9 @@ impl ItemImageCache {
 
 fn material_color(material: Material) -> Color {
     match material {
-        Material::Twig => Color::srgb(1.0, 0.7, 0.3),
-        Material::PlantFiber => Color::srgb(0.1, 1.0, 0.1),
-        Material::Flint => Color::srgb(0.5, 0.5, 0.5),
+        Material::Twig => Color::srgb(0.7, 0.45, 0.0),
+        Material::PlantFiber => Color::srgb(0.1, 0.8, 0.1),
+        Material::Flint => Color::srgb(0.4, 0.4, 0.4),
     }
 }
 

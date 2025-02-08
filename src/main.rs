@@ -5,6 +5,7 @@ mod aabb;
 mod block;
 mod chunk;
 mod game_state;
+mod inventory;
 mod item;
 mod level;
 mod loader;
