@@ -20,6 +20,7 @@ pub enum ItemKind {
     PlantFiber,
     Flint,
     Soil,
+    Glass,
     Handle(ToolPart),
     Binding(ToolPart),
     PickaxeHead(ToolPart),
@@ -28,12 +29,22 @@ pub enum ItemKind {
         binding: ToolPart,
         head: ToolPart,
     },
+    SmallBottle,
+    MediumBottle,
+    LargeBottle,
 }
 
 impl ItemKind {
     pub fn is_stackable(&self) -> bool {
         match self {
-            Self::Twig | Self::PlantFiber | Self::Flint | Self::Soil => true,
+            Self::Twig
+            | Self::PlantFiber
+            | Self::Flint
+            | Self::Soil
+            | Self::Glass
+            | Self::SmallBottle
+            | Self::MediumBottle
+            | Self::LargeBottle => true,
             Self::Handle(..) | Self::Binding(..) | Self::PickaxeHead(..) | Self::Pickaxe { .. } => {
                 false
             }
@@ -61,6 +72,7 @@ pub enum Material {
     Twig,
     PlantFiber,
     Flint,
+    Glass,
 }
 
 impl Material {
@@ -69,6 +81,7 @@ impl Material {
             Self::Twig => 100,
             Self::PlantFiber => 100,
             Self::Flint => 200,
+            Self::Glass => 100,
         }
     }
 
@@ -77,6 +90,7 @@ impl Material {
             Self::Twig => 1.0,
             Self::PlantFiber => 0.5,
             Self::Flint => 2.0,
+            Self::Glass => 1.5,
         }
     }
 }
@@ -90,6 +104,7 @@ impl fmt::Display for Material {
                 Self::Twig => "Twig",
                 Self::PlantFiber => "Plant Fiber",
                 Self::Flint => "Flint",
+                Self::Glass => "Glass",
             }
         )
     }
@@ -119,10 +134,14 @@ impl fmt::Display for ItemKind {
                 Self::PlantFiber => "Plant Fiber".to_string(),
                 Self::Flint => "Flint".to_string(),
                 Self::Soil => "Soil".to_string(),
+                Self::Glass => "Glass".to_string(),
                 Self::Handle(part) => format!("{part} Handle"),
                 Self::Binding(part) => format!("{part} Binding"),
                 Self::PickaxeHead(part) => format!("{part} Pickaxe Head"),
                 Self::Pickaxe { head, .. } => format!("{head} Pickaxe"),
+                Self::SmallBottle => "Small Bottle".to_string(),
+                Self::MediumBottle => "Medium Bottle".to_string(),
+                Self::LargeBottle => "Large Bottle".to_string(),
             }
         )
     }

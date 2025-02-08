@@ -1,13 +1,61 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::item::Item;
+use crate::item::{Item, ItemKind, Material, ToolPart};
 
-#[derive(Debug, Default, Clone, Resource, Serialize, Deserialize)]
+#[derive(Debug, Clone, Resource, Serialize, Deserialize)]
 pub struct Inventory {
     items: Vec<Item>,
     hotbar: [Option<usize>; 9],
     selected: usize,
+}
+
+impl Default for Inventory {
+    #[allow(clippy::vec_init_then_push)]
+    fn default() -> Self {
+        let mut items = Vec::new();
+
+        items.push(Item::new(ItemKind::Twig, 1));
+        items.push(Item::new(ItemKind::PlantFiber, 1));
+        items.push(Item::new(ItemKind::Flint, 1));
+        items.push(Item::new(ItemKind::Soil, 1));
+        items.push(Item::new(ItemKind::Glass, 1));
+        items.push(Item::new(ItemKind::SmallBottle, 1));
+        items.push(Item::new(ItemKind::MediumBottle, 1));
+        items.push(Item::new(ItemKind::LargeBottle, 1));
+
+        let materials = [
+            Material::Twig,
+            Material::PlantFiber,
+            Material::Flint,
+            Material::Glass,
+        ];
+
+        for &material in &materials {
+            items.push(Item::new(ItemKind::Handle(ToolPart::new(material)), 1));
+            items.push(Item::new(ItemKind::Binding(ToolPart::new(material)), 1));
+            items.push(Item::new(ItemKind::PickaxeHead(ToolPart::new(material)), 1));
+
+            for &second in &materials {
+                for &third in &materials {
+                    items.push(Item::new(
+                        ItemKind::Pickaxe {
+                            handle: ToolPart::new(material),
+                            binding: ToolPart::new(second),
+                            head: ToolPart::new(third),
+                        },
+                        1,
+                    ));
+                }
+            }
+        }
+
+        Self {
+            items,
+            hotbar: [None; 9],
+            selected: 0,
+        }
+    }
 }
 
 impl Inventory {

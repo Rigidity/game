@@ -43,7 +43,7 @@ pub fn setup_inventory_menu(mut commands: Commands) {
                     flex_direction: FlexDirection::Column,
                     ..default()
                 },
-                BackgroundColor(Color::srgb(0.3, 0.3, 0.3)),
+                BackgroundColor(Color::srgba(0.3, 0.3, 0.3, 0.5)),
                 BorderRadius::all(Val::Px(8.0)),
             ))
             .with_child((
@@ -84,7 +84,7 @@ pub fn toggle_inventory_menu(
     *inventory_menu = if should_grab {
         Visibility::Hidden
     } else {
-        Visibility::Visible
+        Visibility::Inherited
     };
 
     inventory_item_list.single_mut().offset_y = 0.0;
@@ -104,7 +104,7 @@ pub fn update_inventory_menu(
     }
 
     for entity in items.iter() {
-        commands.entity(entity).despawn();
+        commands.entity(entity).despawn_recursive();
     }
 
     commands.entity(item_list.single()).with_children(|list| {

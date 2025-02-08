@@ -81,7 +81,10 @@ impl Block {
 
                 drops
             }
-            Self::Dirt => vec![Item::new(ItemKind::Soil, 1)],
+            Self::Dirt => vec![
+                Item::new(ItemKind::Soil, 1),
+                Item::new(ItemKind::SmallBottle, 1),
+            ],
             Self::Sand => vec![
                 Item::new(ItemKind::Handle(ToolPart::new(Material::Twig)), 1),
                 Item::new(ItemKind::PickaxeHead(ToolPart::new(Material::Flint)), 1),

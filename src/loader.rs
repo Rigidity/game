@@ -135,6 +135,18 @@ pub struct ItemImages {
 
     #[asset(path = "Items/Items - Twig.png")]
     pub twig: Handle<Image>,
+
+    #[asset(path = "Items/Items - Small Bottle.png")]
+    pub small_bottle: Handle<Image>,
+
+    #[asset(path = "Items/Items - Medium Bottle.png")]
+    pub medium_bottle: Handle<Image>,
+
+    #[asset(path = "Items/Items - Large Bottle.png")]
+    pub large_bottle: Handle<Image>,
+
+    #[asset(path = "Items/Items - Glass.png")]
+    pub glass: Handle<Image>,
 }
 
 impl BlockImages {

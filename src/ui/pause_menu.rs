@@ -50,12 +50,12 @@ pub fn toggle_pause_menu(
     *pause_menu = if should_grab {
         Visibility::Hidden
     } else {
-        Visibility::Visible
+        Visibility::Inherited
     };
 
     let mut hud = hud.single_mut();
     *hud = if should_grab {
-        Visibility::Visible
+        Visibility::Inherited
     } else {
         Visibility::Hidden
     };

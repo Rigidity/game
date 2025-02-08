@@ -505,7 +505,7 @@ fn unload_distant_chunks(
             });
 
             // Despawn the chunk entity
-            commands.entity(entity).despawn();
+            commands.entity(entity).despawn_recursive();
         }
     }
 }

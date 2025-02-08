@@ -26,6 +26,7 @@ impl ItemImageCache {
             ItemKind::Soil => return handles.soil.clone(),
             ItemKind::Twig => return handles.twig.clone(),
             ItemKind::PlantFiber => return handles.plant_fiber.clone(),
+            ItemKind::Glass => return handles.glass.clone(),
             ItemKind::Handle(part) => (handles.handle.clone(), part.material),
             ItemKind::Binding(part) => (handles.binding.clone(), part.material),
             ItemKind::PickaxeHead(part) => (handles.pickaxe_head.clone(), part.material),
@@ -60,6 +61,24 @@ impl ItemImageCache {
                 self.images.insert(item, handle.clone());
                 return handle;
             }
+            ItemKind::SmallBottle => {
+                let template = images.get(&handles.small_bottle).unwrap().clone();
+                let handle = images.add(colorize_template(template, Color::NONE));
+                self.images.insert(item, handle.clone());
+                return handle;
+            }
+            ItemKind::MediumBottle => {
+                let template = images.get(&handles.medium_bottle).unwrap().clone();
+                let handle = images.add(colorize_template(template, Color::NONE));
+                self.images.insert(item, handle.clone());
+                return handle;
+            }
+            ItemKind::LargeBottle => {
+                let template = images.get(&handles.large_bottle).unwrap().clone();
+                let handle = images.add(colorize_template(template, Color::NONE));
+                self.images.insert(item, handle.clone());
+                return handle;
+            }
         };
 
         let template = images.get(&handle).unwrap().clone();
@@ -74,6 +93,7 @@ fn material_color(material: Material) -> Color {
         Material::Twig => Color::srgb(0.7, 0.45, 0.0),
         Material::PlantFiber => Color::srgb(0.1, 0.8, 0.1),
         Material::Flint => Color::srgb(0.4, 0.4, 0.4),
+        Material::Glass => Color::srgb(0.83 * 1.1, 0.99 * 1.1, 1.0 * 1.1),
     }
 }
 
@@ -83,6 +103,14 @@ fn colorize_template(mut template: Image, color: Color) -> Image {
     for x in 0..template.width() {
         for y in 0..template.height() {
             let grayscale = template.get_color_at(x, y).unwrap().to_srgba();
+
+            if grayscale.red != grayscale.green
+                || grayscale.red != grayscale.blue
+                || grayscale.green != grayscale.blue
+            {
+                continue;
+            }
+
             let new_pixel = colorize_pixel(
                 [grayscale.red, grayscale.green, grayscale.blue],
                 [color.red, color.green, color.blue],
@@ -91,7 +119,12 @@ fn colorize_template(mut template: Image, color: Color) -> Image {
                 .set_color_at(
                     x,
                     y,
-                    Color::srgba(new_pixel[0], new_pixel[1], new_pixel[2], grayscale.alpha),
+                    Color::srgba(
+                        new_pixel[0],
+                        new_pixel[1],
+                        new_pixel[2],
+                        grayscale.alpha * color.alpha,
+                    ),
                 )
                 .unwrap();
         }
@@ -129,11 +162,9 @@ fn copy_non_transparent_pixels(
 
             let current = image.get_color_at(dest_x, dest_y).unwrap().to_srgba();
 
-            if pixel.alpha == 0.0 || (pixel.alpha < 1.0 && current.alpha == 0.0) {
+            if pixel.alpha == 0.0 {
                 continue;
             }
-
-            // If pixel has any opacity
 
             // Blend each color channel (RGB)
             let blended = Color::srgba(

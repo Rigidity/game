@@ -120,7 +120,7 @@ pub fn update_hotbar_display(
 
     // Remove existing item displays
     for entity in item_displays.iter() {
-        commands.entity(entity).despawn();
+        commands.entity(entity).despawn_recursive();
     }
 
     // Update each slot with current inventory items
