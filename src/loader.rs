@@ -64,7 +64,7 @@ pub struct BlockImages {
     #[asset(path = "Voxels/Blocks - Sand.png")]
     pub sand: Handle<Image>,
 
-    #[asset(path = "Voxels/Water.png")]
+    #[asset(path = "Voxels/Blocks - Water.png")]
     pub water: Handle<Image>,
 
     #[asset(path = "Voxels/Blocks - Gravel.png")]
@@ -126,6 +126,18 @@ pub struct ItemImages {
 
     #[asset(path = "Items/Items - Pickaxe Head.png")]
     pub pickaxe_head: Handle<Image>,
+
+    #[asset(path = "Items/Items - Shovel Binding Layer.png")]
+    pub shovel_binding_layer: Handle<Image>,
+
+    #[asset(path = "Items/Items - Shovel Handle Layer.png")]
+    pub shovel_handle_layer: Handle<Image>,
+
+    #[asset(path = "Items/Items - Shovel Head Layer.png")]
+    pub shovel_head_layer: Handle<Image>,
+
+    #[asset(path = "Items/Items - Shovel Head.png")]
+    pub shovel_head: Handle<Image>,
 
     #[asset(path = "Items/Items - Plant Fiber.png")]
     pub plant_fiber: Handle<Image>,

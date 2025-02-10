@@ -35,11 +35,21 @@ impl Default for Inventory {
             items.push(Item::new(ItemKind::Handle(ToolPart::new(material)), 1));
             items.push(Item::new(ItemKind::Binding(ToolPart::new(material)), 1));
             items.push(Item::new(ItemKind::PickaxeHead(ToolPart::new(material)), 1));
+            items.push(Item::new(ItemKind::ShovelHead(ToolPart::new(material)), 1));
 
             for &second in &materials {
                 for &third in &materials {
                     items.push(Item::new(
                         ItemKind::Pickaxe {
+                            handle: ToolPart::new(material),
+                            binding: ToolPart::new(second),
+                            head: ToolPart::new(third),
+                        },
+                        1,
+                    ));
+
+                    items.push(Item::new(
+                        ItemKind::Shovel {
                             handle: ToolPart::new(material),
                             binding: ToolPart::new(second),
                             head: ToolPart::new(third),

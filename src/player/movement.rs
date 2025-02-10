@@ -15,7 +15,7 @@ pub fn player_move(
     mut query: Query<(&mut Velocity, &mut Transform, &Player)>,
     camera: Query<&Transform, (With<PlayerCamera>, Without<Player>)>,
 ) {
-    const MOVEMENT_SPEED: f32 = 11.0;
+    const MOVEMENT_SPEED: f32 = 20.0;
     const JUMP_FORCE: f32 = 7.6;
 
     if let Ok(window) = primary_window.get_single() {

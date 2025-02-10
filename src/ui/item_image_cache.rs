@@ -30,6 +30,7 @@ impl ItemImageCache {
             ItemKind::Handle(part) => (handles.handle.clone(), part.material),
             ItemKind::Binding(part) => (handles.binding.clone(), part.material),
             ItemKind::PickaxeHead(part) => (handles.pickaxe_head.clone(), part.material),
+            ItemKind::ShovelHead(part) => (handles.shovel_head.clone(), part.material),
             ItemKind::Pickaxe {
                 handle,
                 binding,
@@ -47,6 +48,37 @@ impl ItemImageCache {
 
                 let head = colorize_template(
                     images.get(&handles.pickaxe_head_layer).unwrap().clone(),
+                    material_color(head.material),
+                );
+
+                let image = copy_non_transparent_pixels(
+                    copy_non_transparent_pixels(handle, &binding, 0, 0),
+                    &head,
+                    0,
+                    0,
+                );
+
+                let handle = images.add(image);
+                self.images.insert(item, handle.clone());
+                return handle;
+            }
+            ItemKind::Shovel {
+                handle,
+                binding,
+                head,
+            } => {
+                let handle = colorize_template(
+                    images.get(&handles.shovel_handle_layer).unwrap().clone(),
+                    material_color(handle.material),
+                );
+
+                let binding = colorize_template(
+                    images.get(&handles.shovel_binding_layer).unwrap().clone(),
+                    material_color(binding.material),
+                );
+
+                let head = colorize_template(
+                    images.get(&handles.shovel_head_layer).unwrap().clone(),
                     material_color(head.material),
                 );
 

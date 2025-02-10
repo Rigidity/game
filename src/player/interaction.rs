@@ -245,7 +245,7 @@ fn raycast_blocks(
     for _ in 0..((max_distance / step) as i32) {
         let block_pos = current_pos.floor();
 
-        if level.block(BlockPos::from_world(block_pos)) != Block::Air {
+        if level.block(BlockPos::from_world(block_pos)).is_solid() {
             let block_center = block_pos + Vec3::splat(0.5);
             let block_aabb = Aabb::new(block_center, Vec3::ONE);
 
