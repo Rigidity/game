@@ -31,6 +31,7 @@ impl ItemImageCache {
             ItemKind::Binding(part) => (handles.binding.clone(), part.material),
             ItemKind::PickaxeHead(part) => (handles.pickaxe_head.clone(), part.material),
             ItemKind::ShovelHead(part) => (handles.shovel_head.clone(), part.material),
+            ItemKind::HatchetHead(part) => (handles.hatchet_head.clone(), part.material),
             ItemKind::Pickaxe {
                 handle,
                 binding,
@@ -93,6 +94,37 @@ impl ItemImageCache {
                 self.images.insert(item, handle.clone());
                 return handle;
             }
+            ItemKind::Hatchet {
+                handle,
+                binding,
+                head,
+            } => {
+                let handle = colorize_template(
+                    images.get(&handles.hatchet_handle_layer).unwrap().clone(),
+                    material_color(handle.material),
+                );
+
+                let binding = colorize_template(
+                    images.get(&handles.hatchet_binding_layer).unwrap().clone(),
+                    material_color(binding.material),
+                );
+
+                let head = colorize_template(
+                    images.get(&handles.hatchet_head_layer).unwrap().clone(),
+                    material_color(head.material),
+                );
+
+                let image = copy_non_transparent_pixels(
+                    copy_non_transparent_pixels(handle, &binding, 0, 0),
+                    &head,
+                    0,
+                    0,
+                );
+
+                let handle = images.add(image);
+                self.images.insert(item, handle.clone());
+                return handle;
+            }
             ItemKind::SmallBottle => {
                 let template = images.get(&handles.small_bottle).unwrap().clone();
                 let handle = images.add(colorize_template(template, Color::NONE));
@@ -125,7 +157,7 @@ fn material_color(material: Material) -> Color {
         Material::Twig => Color::srgb(0.7, 0.45, 0.0),
         Material::PlantFiber => Color::srgb(0.1, 0.8, 0.1),
         Material::Flint => Color::srgb(0.4, 0.4, 0.4),
-        Material::Glass => Color::srgba(0.83 * 1.5, 0.99 * 1.5, 1.0 * 1.5, 0.4),
+        Material::Glass => Color::srgb(0.83, 0.99, 1.0),
     }
 }
 

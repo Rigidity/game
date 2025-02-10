@@ -25,12 +25,18 @@ pub enum ItemKind {
     Binding(ToolPart),
     PickaxeHead(ToolPart),
     ShovelHead(ToolPart),
+    HatchetHead(ToolPart),
     Pickaxe {
         handle: ToolPart,
         binding: ToolPart,
         head: ToolPart,
     },
     Shovel {
+        handle: ToolPart,
+        binding: ToolPart,
+        head: ToolPart,
+    },
+    Hatchet {
         handle: ToolPart,
         binding: ToolPart,
         head: ToolPart,
@@ -55,8 +61,10 @@ impl ItemKind {
             | Self::Binding(..)
             | Self::PickaxeHead(..)
             | Self::ShovelHead(..)
+            | Self::HatchetHead(..)
             | Self::Pickaxe { .. }
-            | Self::Shovel { .. } => false,
+            | Self::Shovel { .. }
+            | Self::Hatchet { .. } => false,
         }
     }
 }
@@ -148,8 +156,10 @@ impl fmt::Display for ItemKind {
                 Self::Binding(part) => format!("{part} Binding"),
                 Self::PickaxeHead(part) => format!("{part} Pickaxe Head"),
                 Self::ShovelHead(part) => format!("{part} Shovel Head"),
+                Self::HatchetHead(part) => format!("{part} Hatchet Head"),
                 Self::Shovel { head, .. } => format!("{head} Shovel"),
                 Self::Pickaxe { head, .. } => format!("{head} Pickaxe"),
+                Self::Hatchet { head, .. } => format!("{head} Hatchet"),
                 Self::SmallBottle => "Small Bottle".to_string(),
                 Self::MediumBottle => "Medium Bottle".to_string(),
                 Self::LargeBottle => "Large Bottle".to_string(),

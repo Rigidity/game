@@ -139,6 +139,18 @@ pub struct ItemImages {
     #[asset(path = "Items/Items - Shovel Head.png")]
     pub shovel_head: Handle<Image>,
 
+    #[asset(path = "Items/Items - Hatchet Binding Layer.png")]
+    pub hatchet_binding_layer: Handle<Image>,
+
+    #[asset(path = "Items/Items - Hatchet Handle Layer.png")]
+    pub hatchet_handle_layer: Handle<Image>,
+
+    #[asset(path = "Items/Items - Hatchet Head Layer.png")]
+    pub hatchet_head_layer: Handle<Image>,
+
+    #[asset(path = "Items/Items - Hatchet Head.png")]
+    pub hatchet_head: Handle<Image>,
+
     #[asset(path = "Items/Items - Plant Fiber.png")]
     pub plant_fiber: Handle<Image>,
 
